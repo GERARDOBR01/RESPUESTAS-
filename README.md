@@ -36,3 +36,6 @@ Usan Chromium con la extensión cargada de verdad y una página falsa en la URL 
 node pruebas/unitarias.js   # lectura de listas y llenado en 3 acomodos de página
 node pruebas/extension.js   # popup, botón, guardado, ↻ de la extensión, arrastre
 ```
+
+## Licencia
+Software propietario de Gerardo Barrera, todos los derechos reservados. Se usa solo con una licencia o suscripción por escrito; ver [LICENSE](LICENSE). No está afiliado a PsicoWeb.

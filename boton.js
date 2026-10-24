@@ -1,5 +1,6 @@
 // Botón flotante en la captura del Raven: llena con un clic usando las respuestas
-// guardadas en la extensión. llenar() viene de llenar.js (mismo content script).
+// guardadas en la extensión. llenar(), cedulaDe() y huellaCedula() vienen de llenar.js y
+// cedula.js (mismo content script).
 // Va dentro de Shadow DOM para que ni la página ni el botón se afecten los estilos.
 // Se puede arrastrar (por si tapa algo de la página) y recuerda dónde quedó.
 (() => {
@@ -75,17 +76,22 @@
     texto.textContent = n ? `Llenar respuestas · ${n}/${TOTAL}` : 'Captura las respuestas en la extensión';
   }
 
-  function mostrar(mensaje, tipo) {
-    mensajeHasta = Date.now() + 2500;
+  function mostrar(mensaje, tipo, duracion = 2500) {
+    mensajeHasta = Date.now() + duracion;
     texto.textContent = mensaje;
     boton.className = tipo;
     clearTimeout(temporizador);
-    temporizador = setTimeout(() => { mensajeHasta = 0; pintar(); }, 2500);
+    temporizador = setTimeout(() => { mensajeHasta = 0; pintar(); }, duracion);
   }
 
+  // De qué candidato son las respuestas: huella de la cédula (cedula.js).
+  let dueno = null;
+  let confirmarOtraHasta = 0;
+
   async function leer() {
-    const { respuestas: guardadas } = await chrome.storage.local.get('respuestas');
-    respuestas = Array.isArray(guardadas) ? guardadas : [];
+    const guardado = await chrome.storage.local.get(['respuestas', 'dueno']);
+    respuestas = Array.isArray(guardado.respuestas) ? guardado.respuestas : [];
+    dueno = typeof guardado.dueno === 'string' ? guardado.dueno : null;
     return respuestas;
   }
 
@@ -96,7 +102,19 @@
     try {
       await leer();
       if (!llenas()) return pintar();
+      const cedula = cedulaDe(location.href);
+      const huella = cedula ? huellaCedula(cedula) : null;
+      if (huella && dueno && dueno !== huella && Date.now() > confirmarOtraHasta) {
+        confirmarOtraHasta = Date.now() + 4000;
+        return mostrar('Son de otra cédula · clic otra vez para llenar igual', 'aviso', 4000);
+      }
+      confirmarOtraHasta = 0;
       const r = llenar(respuestas);
+      if (!r.error && huella) {
+        // Se llenaron en esta cédula: desde ahora son de este candidato.
+        dueno = huella;
+        chrome.storage.local.set({ dueno }).catch(() => {});
+      }
       if (r.error) mostrar(r.error, 'mal');
       else if (r.enBlanco.length) mostrar(`${r.llenadas} llenadas · ${r.enBlanco.length} en blanco`, 'aviso');
       else mostrar(`✓ ${r.llenadas} llenadas — revisa y guarda`, 'ok');

@@ -22,6 +22,9 @@ USAR
 4. Revisa las respuestas en la página y guarda en PsicoWeb como siempre.
    La extensión no guarda ni envía nada por ti.
 5. Al terminar con un candidato, «Borrar todo» (pide un segundo clic).
+   Si se te olvida: la extensión recuerda de qué candidato (cédula) son las respuestas.
+   Al abrir otro candidato avisa «otra cédula» y ofrece «Empezar captura nueva»; para
+   llenar de todos modos pide un segundo clic.
 
 SI ALGO NO FUNCIONA
 - El botón dice «La extensión se actualizó: recarga la página»: presiona F5.

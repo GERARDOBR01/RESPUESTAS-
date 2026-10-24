@@ -22,6 +22,25 @@ function pruebasAnalizar() {
   console.log('✓ analizar');
 }
 
+function pruebasCedula() {
+  const { cedulaDe, huellaCedula } = require('../cedula.js');
+  const base = 'https://app.psicoweb.com/Raven/IntroducirRespuestas';
+  assert.equal(cedulaDe(`${base}?cedula=abcd010101hdfxyz01`), 'ABCD010101HDFXYZ01');
+  assert.equal(cedulaDe(`${base}?x=1&cedula=%20ab12%20`), 'AB12', 'recorta y decodifica');
+  assert.equal(cedulaDe(base), null, 'sin cédula');
+  assert.equal(cedulaDe(`${base}?cedula=`), null, 'cédula vacía');
+  assert.equal(cedulaDe('no es url'), null);
+  const h = huellaCedula('ABCD010101HDFXYZ01');
+  assert.equal(h, huellaCedula(' abcd010101hdfxyz01 '), 'misma huella sin importar mayúsculas/espacios');
+  assert.notEqual(h, huellaCedula('ABCD010101HDFXYZ02'), 'cédulas distintas, huellas distintas');
+  assert.ok(!h.toUpperCase().includes('ABCD'), 'la huella no contiene la cédula');
+  // Sin choques en un lote de cédulas parecidas
+  const huellas = new Set();
+  for (let i = 0; i < 5000; i++) huellas.add(huellaCedula('ABCD0101' + String(i).padStart(10, '0')));
+  assert.equal(huellas.size, 5000);
+  console.log('✓ cédula: lectura de la URL y huella');
+}
+
 async function pruebasLlenar() {
   const { chromium } = cargarPlaywright();
   const navegador = await chromium.launch({ executablePath: rutaChromium(chromium) });
@@ -83,6 +102,7 @@ async function pruebasLlenar() {
 
 (async () => {
   pruebasAnalizar();
+  pruebasCedula();
   await pruebasLlenar();
   console.log('Unitarias: todo bien.');
 })().catch((e) => { console.error(e); process.exit(1); });

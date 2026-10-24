@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Raven · llenar respuestas",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Captura las 60 respuestas del Raven una vez y llénalas en la página de PsicoWeb con un clic. No guarda la página por ti.",
   "icons": {
     "16": "iconos/icono-16.png",
@@ -33,6 +33,7 @@
         "http://app.psicoweb.com/Raven/IntroducirRespuestas*"
       ],
       "js": [
+        "cedula.js",
         "llenar.js",
         "boton.js"
       ]

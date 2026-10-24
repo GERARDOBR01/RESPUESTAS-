@@ -237,6 +237,79 @@ const ok = (m) => console.log('✓ ' + m);
     opcionesPagina = {};
     ok('si la página rechaza un valor, el botón lo dice');
 
+    // --- Aviso por cédula: no llenar a un candidato con las respuestas de otro
+    const { huellaCedula } = require(path.join(RAIZ, 'cedula.js'));
+    const URL_OTRA = 'https://app.psicoweb.com/Raven/IntroducirRespuestas?cedula=OTRA';
+    const leerAlmacen = async () => {
+      const p = await ctx.newPage();
+      await p.goto(`chrome-extension://${ID}/popup.html`); // fuera de PsicoWeb: no escribe nada
+      const datos = await p.evaluate(() => chrome.storage.local.get(null));
+      await p.close();
+      return datos;
+    };
+    let almacen = await leerAlmacen();
+    assert.equal(almacen.dueno, huellaCedula('PRUEBA'), 'la captura quedó ligada a la cédula donde se tecleó');
+    assert.ok(!JSON.stringify(almacen).includes('PRUEBA'), 'no se guarda la cédula, solo su huella');
+
+    // Botón de la página en otra cédula: primer clic avisa y no llena; segundo llena
+    await raven.goto(URL_OTRA);
+    await raven.waitForFunction(() =>
+      document.querySelector('#raven-llenar')?.shadowRoot.textContent.includes('60/60'));
+    await boton.click();
+    assert.match(await boton.textContent(), /otra cédula/);
+    assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
+    await boton.click();
+    assert.match(await boton.textContent(), /✓ 60 llenadas/);
+    assert.deepEqual(await ordenadas(), nuevas);
+    assert.equal((await leerAlmacen()).dueno, huellaCedula('OTRA'), 'al llenar pasan a ser de esta cédula');
+    ok('botón: en otra cédula avisa y pide un segundo clic');
+
+    // Popup en la cédula correcta: sin aviso
+    ({ p: popup } = await abrirPopup());
+    assert.ok(await popup.isHidden('#otra'));
+    await popup.close();
+
+    // Popup en otra cédula: aviso visible y «Llenar página» pide confirmación
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+    ({ p: popup, errores } = await abrirPopup());
+    assert.ok(await popup.isVisible('#otra'), 'aviso de otra cédula');
+    await popup.click('#llenar');
+    assert.match(await popup.textContent('#estado'), /otra cédula/);
+    assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
+    await popup.click('#llenar');
+    await popup.waitForFunction(() => /Listo/.test(document.getElementById('estado').textContent));
+    assert.deepEqual(await ordenadas(), nuevas);
+    assert.ok(await popup.isHidden('#otra'), 'tras llenar ya son de esta cédula');
+    assert.deepEqual(errores, []);
+    await popup.close();
+    ok('popup: aviso de otra cédula y confirmación al llenar');
+
+    // «Empezar captura nueva» limpia todo; la captura nueva queda ligada a la cédula abierta
+    await raven.goto(URL_OTRA);
+    await boton.waitFor();
+    ({ p: popup } = await abrirPopup());
+    assert.ok(await popup.isVisible('#otra'));
+    await popup.click('#nueva');
+    assert.equal(await popup.textContent('#contador'), '0 / 60');
+    assert.ok(await popup.isHidden('#otra'));
+    await raven.waitForFunction(() =>
+      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('Captura las respuestas'));
+    await popup.keyboard.type('7');
+    await popup.waitForTimeout(150);
+    almacen = await leerAlmacen();
+    assert.equal(almacen.dueno, huellaCedula('OTRA'));
+    assert.equal(almacen.respuestas[0], '7');
+    await popup.close();
+    ok('«Empezar captura nueva» limpia; la captura nueva es de la cédula abierta');
+
+    // Se deja como estaba para lo que sigue
+    ({ p: popup } = await abrirPopup());
+    await popup.evaluate(([v, d]) => chrome.storage.local.set({ respuestas: v, dueno: d }), [nuevas, huellaCedula('PRUEBA')]);
+    await popup.close();
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+
     // --- Fuera de PsicoWeb
     const otra = await ctx.newPage();
     await otra.route('https://example.org/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>otra</p>' }));

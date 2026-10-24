@@ -1,4 +1,5 @@
-// analizar() y llenar() vienen de analizar.js y llenar.js (cargados antes en popup.html).
+// analizar(), llenar(), cedulaDe() y huellaCedula() vienen de analizar.js, llenar.js y
+// cedula.js (cargados antes en popup.html).
 const $ = (id) => document.getElementById(id);
 const btnLlenar = $('llenar');
 const btnBorrar = $('borrar');
@@ -84,9 +85,27 @@ function pegar(e, i) {
 
 const valores = () => casillas.map((c) => c.value);
 
+// De qué candidato son las respuestas: huella de la cédula (cedula.js), nunca la cédula.
+let dueno = null;          // huella guardada con las respuestas
+let huellaPestana = null;  // huella de la cédula abierta en la pestaña
+let llenasAntes = 0;
+let confirmarOtraHasta = 0;
+
+const esDeOtra = () =>
+  Boolean(dueno && huellaPestana && dueno !== huellaPestana && casillas.some((c) => c.value));
+
+function avisoOtra() {
+  $('otra').hidden = !esDeOtra();
+}
+
 function cambio() {
-  pintar();
-  chrome.storage.local.set({ respuestas: valores() })
+  const llenas = pintar();
+  // Una captura nueva (de 0 a la primera respuesta) queda ligada a la cédula abierta.
+  if (llenasAntes === 0 && llenas > 0) dueno = huellaPestana;
+  if (llenas === 0) dueno = null;
+  llenasAntes = llenas;
+  avisoOtra();
+  chrome.storage.local.set({ respuestas: valores(), dueno })
     .catch((e) => estado('No se pudo guardar: ' + e.message, 'mal'));
 }
 
@@ -95,6 +114,7 @@ function pintar() {
   const contador = $('contador');
   contador.textContent = `${llenas} / ${TOTAL}`;
   contador.className = 'contador ' + (llenas === TOTAL ? 'ok' : '');
+  return llenas;
 }
 
 function estado(texto, tipo = '') {
@@ -121,9 +141,14 @@ async function revisarPestana() {
     pagina.className = 'pagina';
     // Si la pestaña ya estaba abierta antes de instalar/recargar la extensión, Chrome no
     // le puso el botón. Se agrega aquí (boton.js no lo duplica si ya existe).
-    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: ['llenar.js', 'boton.js'] })
+    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: ['cedula.js', 'llenar.js', 'boton.js'] })
       .catch(() => {});
   }
+  if (url && url.hostname.endsWith('psicoweb.com')) {
+    const cedula = cedulaDe(url.href);
+    huellaPestana = cedula ? huellaCedula(cedula) : null;
+  }
+  avisoOtra();
 }
 
 // Primero la página principal; solo si ahí no están las casillas se busca en sus marcos
@@ -154,20 +179,41 @@ btnBorrar.addEventListener('click', async () => {
   }
   confirmarHasta = 0;
   btnBorrar.textContent = 'Borrar todo';
+  await borrarTodo();
+});
+
+// «Empezar captura nueva» del aviso de otra cédula: ya es una decisión explícita.
+$('nueva').addEventListener('click', () => borrarTodo());
+
+async function borrarTodo() {
   casillas.forEach((c) => { c.value = ''; });
+  dueno = null;
+  llenasAntes = 0;
   pintar();
-  await chrome.storage.local.remove('respuestas').catch(() => {});
+  avisoOtra();
+  await chrome.storage.local.remove(['respuestas', 'dueno']).catch(() => {});
   estado('');
   casillas[0].focus();
-});
+}
 
 btnLlenar.addEventListener('click', async () => {
   const respuestas = valores();
   if (respuestas.every((v) => !v)) return estado('No hay respuestas capturadas.', 'mal');
+  if (esDeOtra() && Date.now() > confirmarOtraHasta) {
+    confirmarOtraHasta = Date.now() + 4000;
+    return estado('Estas respuestas se capturaron para otra cédula. Clic otra vez en «Llenar página» para usarlas aquí.', 'aviso');
+  }
+  confirmarOtraHasta = 0;
 
   btnLlenar.disabled = true;
   try {
     const r = await llenarPestana(respuestas);
+    if (!r.error && huellaPestana) {
+      // Se llenaron en esta cédula: desde ahora son de este candidato.
+      dueno = huellaPestana;
+      avisoOtra();
+      chrome.storage.local.set({ dueno }).catch(() => {});
+    }
     if (r.error) {
       estado(r.error, 'mal');
     } else if (r.enBlanco.length) {
@@ -186,7 +232,8 @@ btnLlenar.addEventListener('click', async () => {
 (async () => {
   armarRejilla();
   try {
-    let { respuestas, lista } = await chrome.storage.local.get(['respuestas', 'lista']);
+    let { respuestas, lista, dueno: guardado } = await chrome.storage.local.get(['respuestas', 'lista', 'dueno']);
+    dueno = typeof guardado === 'string' ? guardado : null;
     if (!respuestas && lista) {
       // Versión anterior guardaba el texto pegado.
       respuestas = analizar(lista).respuestas;
@@ -199,7 +246,7 @@ btnLlenar.addEventListener('click', async () => {
   } catch (e) {
     estado('No se pudieron leer las respuestas guardadas: ' + e.message, 'mal');
   }
-  pintar();
+  llenasAntes = pintar();
   await revisarPestana();
   const primeraVacia = casillas.findIndex((c) => !c.value);
   enfocar(primeraVacia === -1 ? 0 : primeraVacia);

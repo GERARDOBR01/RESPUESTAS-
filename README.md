@@ -20,6 +20,9 @@ Los datos se quedan en la extensión: la próxima vez solo aprietas **Llenar res
 
 Para actualizar la extensión usa siempre ↻ en `chrome://extensions` (no «Quitar»: eso borra las respuestas guardadas). Después de ↻, el botón que ya estaba en la página avisa «recarga la página» en vez de llenar; abrir la extensión o recargar la página lo pone al día.
 
+## Aviso por cédula
+Las respuestas quedan ligadas al candidato: se guarda una huella de la cédula de la URL (`cedula.js`), nunca la cédula. Una captura nueva toma la cédula abierta al teclear la primera respuesta, y llenar en una cédula pasa las respuestas a esa cédula. Si la pestaña es de otra cédula, el popup muestra un aviso con «Empezar captura nueva», y tanto «Llenar página» como el botón de la página piden un segundo clic.
+
 ## Cómo encuentra las casillas
 Primero por la etiqueta «N.-» junto a cada casilla; si no la reconoce, por posición (5 columnas de 12). Después de llenar, comprueba que la página se quedó con cada valor; si alguno no lo aceptó, lo dice. Si en algún momento dice que no reconoció las casillas, copia el HTML de un renglón (clic derecho → Inspeccionar → copiar elemento) para ajustarlo.
 
@@ -27,6 +30,7 @@ Primero por la etiqueta «N.-» junto a cada casilla; si no la reconoce, por pos
 - `popup.html/css/js` — la ventana de la extensión (captura de las 60).
 - `boton.js` — botón flotante en la página del Raven (content script).
 - `llenar.js` — ubica las casillas, escribe y comprueba. Lo usan el popup y el botón.
+- `cedula.js` — lee la cédula de la URL y calcula su huella.
 - `analizar.js` — lee una lista pegada (columna de Excel, comas o espacios).
 - `marca/logo.svg` — logo original (matriz 2×2 con la pieza que falta en rojo). `node marca/generar-iconos.js` regenera `iconos/icono-{16,32,48,128}.png`.
 

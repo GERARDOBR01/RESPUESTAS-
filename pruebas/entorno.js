@@ -5,7 +5,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-const RAIZ = path.resolve(__dirname, '..');
+// EXTENSION_DIR permite probar otra copia (p. ej. el .zip de entrega descomprimido).
+const RAIZ = process.env.EXTENSION_DIR ? path.resolve(process.env.EXTENSION_DIR) : path.resolve(__dirname, '..');
 
 function cargarPlaywright() {
   const candidatos = [process.env.PLAYWRIGHT_DIR, 'playwright', path.join(os.homedir(), 'jobbot', 'node_modules', 'playwright')];

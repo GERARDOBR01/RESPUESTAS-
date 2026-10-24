@@ -30,6 +30,9 @@ Primero por la etiqueta «N.-» junto a cada casilla; si no la reconoce, por pos
 - `analizar.js` — lee una lista pegada (columna de Excel, comas o espacios).
 - `marca/logo.svg` — logo original (matriz 2×2 con la pieza que falta en rojo). `node marca/generar-iconos.js` regenera `iconos/icono-{16,32,48,128}.png`.
 
+## Entregar a un cliente
+`powershell -ExecutionPolicy Bypass -File herramientas\empaquetar.ps1` arma `dist\raven-llenar-respuestas-v<versión>.zip`, que contiene solo lo que usa Chrome, la guía `INSTALAR.txt` y la `LICENSE`. Para probar esa copia tal cual: descomprímela y corre `EXTENSION_DIR=<carpeta> node pruebas/extension.js`.
+
 ## Pruebas
 Usan Chromium con la extensión cargada de verdad y una página falsa en la URL de PsicoWeb (sin datos reales). Necesitan Node y Playwright (`PLAYWRIGHT_DIR` si no está a la mano) y Chromium (`npx playwright install chromium`, o `CHROMIUM` con la ruta).
 

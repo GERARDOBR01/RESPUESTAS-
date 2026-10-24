@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="vidrio">
+    <header>
+      <span class="punto"></span>
+      <h1>Raven · respuestas</h1>
+      <span id="contador" class="contador">0 / 60</span>
+    </header>
+
+    <p id="pagina" class="pagina"></p>
+
+    <div id="rejilla" class="rejilla"></div>
+
+    <p class="ayuda">Escribe un número y salta sola a la siguiente; se guarda al momento. En la página del Raven también tienes el botón «Llenar respuestas».</p>
+
+    <div class="botones">
+      <button id="borrar" class="secundario" type="button">Borrar todo</button>
+      <button id="llenar" class="primario" type="button">Llenar página</button>
+    </div>
+
+    <p id="estado" class="estado"></p>
+  </main>
+
+  <script src="analizar.js"></script>
+  <script src="llenar.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

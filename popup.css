@@ -1,0 +1,110 @@
+:root {
+  --rojo: #e5484d;
+  --azul: #1e88e5;
+  --texto: #1d2433;
+  --tenue: #5b6475;
+  --vidrio: rgba(255, 255, 255, 0.62);
+  --borde: rgba(255, 255, 255, 0.75);
+  --campo: rgba(255, 255, 255, 0.8);
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  width: 540px;
+  font: 13px/1.4 system-ui, "Segoe UI", sans-serif;
+  color: var(--texto);
+  background:
+    radial-gradient(circle at 15% 10%, rgba(229, 72, 77, 0.22), transparent 45%),
+    radial-gradient(circle at 90% 85%, rgba(30, 136, 229, 0.25), transparent 50%),
+    #eef1f6;
+}
+
+.vidrio {
+  margin: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--vidrio);
+  border: 1px solid var(--borde);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 6px 24px rgba(29, 36, 51, 0.12);
+}
+
+header { display: flex; align-items: center; gap: 8px; }
+h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
+
+.punto {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--rojo);
+  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.18);
+}
+
+.contador {
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--campo);
+  color: var(--tenue);
+}
+.contador.ok { color: #1a7f37; }
+.contador.mal { color: var(--rojo); }
+
+.pagina { margin: 8px 0; font-size: 12px; color: var(--tenue); }
+.pagina.mal { color: var(--rojo); }
+
+.rejilla {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px 10px;
+}
+.serie {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tenue);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(29, 36, 51, 0.1);
+  margin-bottom: 2px;
+}
+.celda { display: flex; align-items: center; gap: 6px; }
+.celda label {
+  width: 28px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--tenue);
+  font-variant-numeric: tabular-nums;
+}
+.celda input {
+  width: 100%;
+  min-width: 0;
+  height: 26px;
+  padding: 0;
+  text-align: center;
+  border-radius: 7px;
+  border: 1px solid rgba(29, 36, 51, 0.14);
+  background: var(--campo);
+  font: 600 14px ui-monospace, Consolas, monospace;
+  color: var(--texto);
+}
+.celda input:focus { outline: 2px solid rgba(30, 136, 229, 0.55); outline-offset: 0; border-color: transparent; }
+
+.ayuda { margin: 8px 0 0; font-size: 11.5px; color: var(--tenue); }
+
+.botones { display: flex; gap: 8px; margin-top: 10px; }
+button {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid transparent;
+  font: 600 13px system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.primario { background: var(--azul); color: #fff; }
+.primario:disabled { opacity: 0.45; cursor: not-allowed; }
+.secundario { background: var(--campo); border-color: rgba(29, 36, 51, 0.12); color: var(--texto); }
+
+.estado { margin: 10px 0 0; min-height: 1em; font-size: 12px; }
+.estado.ok { color: #1a7f37; }
+.estado.mal { color: var(--rojo); }
+.estado.aviso { color: #9a5b00; }

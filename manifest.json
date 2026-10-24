@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "Raven · llenar respuestas",
+  "version": "0.4.0",
+  "description": "Captura las 60 respuestas del Raven una vez y llénalas en la página de PsicoWeb con un clic. No guarda la página por ti.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["https://app.psicoweb.com/*", "http://app.psicoweb.com/*"],
+  "action": {
+    "default_title": "Raven · respuestas",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://app.psicoweb.com/Raven/IntroducirRespuestas*",
+        "http://app.psicoweb.com/Raven/IntroducirRespuestas*"
+      ],
+      "js": ["llenar.js", "boton.js"]
+    }
+  ]
+}

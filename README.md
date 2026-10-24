@@ -28,6 +28,7 @@ Primero por la etiqueta «N.-» junto a cada casilla; si no la reconoce, por pos
 - `boton.js` — botón flotante en la página del Raven (content script).
 - `llenar.js` — ubica las casillas, escribe y comprueba. Lo usan el popup y el botón.
 - `analizar.js` — lee una lista pegada (columna de Excel, comas o espacios).
+- `marca/logo.svg` — logo original (matriz 2×2 con la pieza que falta en rojo). `node marca/generar-iconos.js` regenera `iconos/icono-{16,32,48,128}.png`.
 
 ## Pruebas
 Usan Chromium con la extensión cargada de verdad y una página falsa en la URL de PsicoWeb (sin datos reales). Necesitan Node y Playwright (`PLAYWRIGHT_DIR` si no está a la mano) y Chromium (`npx playwright install chromium`, o `CHROMIUM` con la ruta).

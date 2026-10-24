@@ -34,11 +34,7 @@ body {
 header { display: flex; align-items: center; gap: 8px; }
 h1 { margin: 0; font-size: 14px; font-weight: 600; flex: 1; }
 
-.punto {
-  width: 9px; height: 9px; border-radius: 50%;
-  background: var(--rojo);
-  box-shadow: 0 0 0 3px rgba(229, 72, 77, 0.18);
-}
+.logo { width: 22px; height: 22px; display: block; }
 
 .contador {
   font-variant-numeric: tabular-nums;

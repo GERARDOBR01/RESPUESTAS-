@@ -35,8 +35,18 @@ const ok = (m) => console.log('✓ ' + m);
     assert.ok(yo, 'la extensión cargó');
     assert.deepEqual(yo.manifestErrors || [], [], 'sin errores de manifest');
     const ID = yo.id;
+    // Los íconos del manifest existen y cargan
+    const manifest = JSON.parse(fs.readFileSync(path.join(RAIZ, 'manifest.json'), 'utf8'));
+    await ext.goto(`chrome-extension://${ID}/popup.html`);
+    for (const [t, archivo] of Object.entries(manifest.icons)) {
+      const medida = await ext.evaluate(async (url) => {
+        const img = new Image(); img.src = url; await img.decode();
+        return [img.naturalWidth, img.naturalHeight];
+      }, `chrome-extension://${ID}/${archivo}`);
+      assert.deepEqual(medida, [+t, +t], `ícono ${t}`);
+    }
     await ext.close();
-    ok(`extensión cargada (${yo.version}, sin errores de manifest)`);
+    ok(`extensión cargada (${yo.version}, sin errores de manifest, íconos ${Object.keys(manifest.icons).join('/')})`);
 
     // --- Botón en la página, sin respuestas
     const raven = await ctx.newPage();

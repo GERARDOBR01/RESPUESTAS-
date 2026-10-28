@@ -41,11 +41,7 @@ function pruebasCedula() {
   assert.equal(huellas.size, 5000);
   console.log('✓ cédula: lectura de la URL y huella');
 
-  const { esDeOtraCedula, segundoClic } = require('../cedula.js');
-  assert.equal(esDeOtraCedula('a1', 'b2'), true, 'huellas distintas');
-  assert.equal(esDeOtraCedula('a1', 'a1'), false, 'misma huella');
-  assert.equal(esDeOtraCedula(null, 'a1'), false, 'sin dueño no se sabe');
-  assert.equal(esDeOtraCedula('a1', null), false, 'sin cédula en la URL no se sabe');
+  const { segundoClic } = require('../cedula.js');
   let reloj = 1000;
   const pedir = segundoClic(4000, () => reloj);
   assert.equal(pedir(), true, 'primer clic: avisa');
@@ -56,7 +52,123 @@ function pruebasCedula() {
   assert.equal(pedir(), true, 'ventana vencida: vuelve a avisar');
   pedir.cancelar();
   assert.equal(pedir(), true, 'cancelar cierra la ventana');
-  console.log('✓ cédula: otra cédula y segundo clic');
+  console.log('✓ segundo clic');
+}
+
+function pruebasCapturas() {
+  const C = require('../capturas.js');
+  const a = C.nuevaCaptura([]);
+  assert.equal(a.nombre, 'Candidato 1');
+  assert.equal(a.respuestas.length, 60);
+  const b = { ...C.nuevaCaptura([a]), huella: 'hb', pista: 'AB01' };
+  assert.equal(b.nombre, 'Candidato 2');
+  a.respuestas = Array(60).fill('3');
+  b.respuestas = Array(60).fill('4');
+  const cola = [a, b];
+
+  assert.deepEqual(C.elegirCaptura(cola, a.id, 'hb'), { captura: b, motivo: 'cedula' }, 'la cédula manda sobre la abierta');
+  assert.equal(C.elegirCaptura(cola, a.id, 'hx').motivo, 'libre', 'abierta sin cédula: se usa y se liga');
+  assert.equal(C.elegirCaptura(cola, b.id, 'hx').motivo, 'otra', 'abierta de otro candidato: confirmar');
+  assert.equal(C.elegirCaptura(cola, b.id, null).motivo, 'actual', 'página sin cédula: la abierta');
+  assert.equal(C.elegirCaptura([], null, 'hb').motivo, 'ninguna');
+
+  // Llenar «a» en la cédula de «b»: «a» queda ligada y hecha; «b» se suelta.
+  const despues = C.marcarLlenada(cola, a.id, 'hb', 'AB01', 123);
+  assert.equal(despues[0].huella, 'hb');
+  assert.equal(despues[0].llenada, 123);
+  assert.equal(despues[1].huella, null, 'una cédula, una captura');
+  assert.equal(cola[0].llenada, null, 'no modifica la cola original');
+  assert.equal(C.nombreCorto(despues[0]), 'Candidato 1 (…AB01)');
+  assert.equal(C.pistaDe(' abcd010101hdfxyz01 '), 'YZ01');
+
+  // Lo guardado por la versión 0.5 pasa a la cola
+  const vieja = Array.from({ length: 60 }, (_, i) => String(i % 7));
+  const m = C.migrarCapturas({ respuestas: vieja, dueno: 'hv' });
+  assert.equal(m.capturas.length, 1);
+  assert.deepEqual(m.capturas[0].respuestas, vieja);
+  assert.equal(m.capturas[0].huella, 'hv');
+  assert.equal(m.actual, m.capturas[0].id);
+  assert.equal(C.migrarCapturas({ capturas: [] }), null, 'ya está al día');
+  assert.deepEqual(C.migrarCapturas({}).capturas[0].respuestas, Array(60).fill(''), 'instalación nueva');
+  console.log('✓ cola de candidatos');
+}
+
+async function pruebasLicencia() {
+  const crypto = require('crypto');
+  const fs = require('fs');
+  const os = require('os');
+  const L = require('../licencia.js');
+  const { firmarClave, publicaJwk, escribirPublica } = require('../herramientas/licencia.js');
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  const publica = publicaJwk(privateKey);
+  const { clave } = firmarClave(privateKey, 'Clínica Ñandú', '2027-01-31');
+  const dia = (f) => L.diaDe(f);
+  const ver = (k, hoy) => L.verificarLicencia(k, dia(hoy), publica);
+
+  let r = await ver(clave, '2026-11-01');
+  assert.equal(r.estado, 'vigente');
+  assert.equal(r.cliente, 'Clínica Ñandú', 'acentos y ñ');
+  assert.equal(r.puedeLlenar, true);
+  assert.equal((await ver(clave, '2027-01-24')).estado, 'vigente', 'faltan 7 días: todavía sin aviso');
+  assert.equal((await ver(clave, '2027-01-25')).estado, 'por-vencer', 'faltan 6: avisa');
+  r = await ver(clave, '2027-01-28');
+  assert.equal(r.estado, 'por-vencer');
+  assert.equal(r.dias, 3);
+  assert.equal((await ver(clave, '2027-01-31')).estado, 'por-vencer', 'el día que vence todavía vale');
+  r = await ver(clave, '2027-02-07');
+  assert.equal(r.estado, 'gracia');
+  assert.equal(r.puedeLlenar, true, 'en gracia sigue llenando');
+  r = await ver(clave, '2027-02-08');
+  assert.equal(r.estado, 'vencida');
+  assert.equal(r.puedeLlenar, false);
+
+  const partido = clave.slice(0, 40) + '\n  ' + clave.slice(40);
+  assert.equal((await ver(partido, '2026-11-01')).estado, 'vigente', 'tolera saltos de línea al pegar');
+  // Cambiar la fecha (o cualquier dato) rompe la firma
+  const [p0, , p2] = clave.split('.');
+  const alterada = `${p0}.${Buffer.from(JSON.stringify({ c: 'Clínica Ñandú', v: '2099-12-31', e: '2026-10-28', n: '0' })).toString('base64url')}.${p2}`;
+  assert.equal((await ver(alterada, '2026-11-01')).estado, 'invalida', 'fecha cambiada a mano');
+  const ajena = firmarClave(crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' }).privateKey, 'X', '2099-01-01').clave;
+  assert.equal((await ver(ajena, '2026-11-01')).estado, 'invalida', 'firmada con otra llave');
+  assert.equal((await ver('hola', '2026-11-01')).estado, 'invalida');
+  assert.equal((await ver('', '2026-11-01')).estado, 'falta');
+  assert.equal((await L.verificarLicencia(clave, dia('2026-11-01'), null)).estado, 'sin-configurar');
+  assert.equal(L.fechaLegible('2027-01-31'), '31 ene 2027');
+
+  // La herramienta escribe la llave pública en licencia.js
+  const copia = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'raven-lic-')), 'licencia.js');
+  fs.copyFileSync(path.join(RAIZ, 'licencia.js'), copia);
+  escribirPublica(publica, copia);
+  delete require.cache[copia];
+  const conLlave = require(copia);
+  assert.equal((await conLlave.verificarLicencia(clave, dia('2026-11-01'))).estado, 'vigente');
+  console.log('✓ licencia: firma, vigencia, aviso, gracia y claves alteradas');
+}
+
+// Lo que carga Chrome (manifest, popup.html, background.js) existe y va en el .zip.
+function pruebasArchivos() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(RAIZ, 'manifest.json'), 'utf8'));
+  const usados = new Set([
+    ...manifest.content_scripts.flatMap((c) => c.js),
+    manifest.background.service_worker,
+    manifest.action.default_popup,
+  ]);
+  const html = fs.readFileSync(path.join(RAIZ, 'popup.html'), 'utf8');
+  for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)) usados.add(m[1]);
+  const fondo = fs.readFileSync(path.join(RAIZ, manifest.background.service_worker), 'utf8');
+  for (const m of fondo.matchAll(/importScripts\('([^']+)'\)/g)) usados.add(m[1]);
+  const popup = fs.readFileSync(path.join(RAIZ, 'popup.js'), 'utf8');
+  for (const m of popup.matchAll(/files: \[([^\]]+)\]/g)) {
+    const inyectados = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+    assert.deepEqual(inyectados, manifest.content_scripts[0].js, 'el popup inyecta lo mismo que el manifest');
+  }
+  const empaque = fs.readFileSync(path.join(__dirname, '..', 'herramientas', 'empaquetar.ps1'), 'utf8');
+  const lista = /\$archivos = (.+)/.exec(empaque)[1];
+  for (const archivo of usados) {
+    assert.ok(fs.existsSync(path.join(RAIZ, archivo)), `existe ${archivo}`);
+    assert.ok(lista.includes(`'${archivo}'`), `empaquetar.ps1 incluye ${archivo}`);
+  }
+  console.log(`✓ archivos: ${usados.size} usados por Chrome, todos existen y van en el .zip`);
 }
 
 async function pruebasLlenar() {
@@ -152,6 +264,9 @@ async function pruebasLlenar() {
 (async () => {
   pruebasAnalizar();
   pruebasCedula();
+  pruebasCapturas();
+  await pruebasLicencia();
+  pruebasArchivos();
   await pruebasLlenar();
   console.log('Unitarias: todo bien.');
 })().catch((e) => { console.error(e); process.exit(1); });

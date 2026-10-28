@@ -1,11 +1,24 @@
-// analizar(), llenar(), cedulaDe(), huellaCedula(), esDeOtraCedula() y segundoClic() vienen
-// de analizar.js, llenar.js y cedula.js (cargados antes en popup.html).
+// analizar(), llenar(), cedulaDe(), huellaCedula(), segundoClic(), las funciones de la cola
+// (capturas.js) y las de la licencia (licencia.js) vienen de los scripts cargados antes en
+// popup.html.
 const $ = (id) => document.getElementById(id);
 const btnLlenar = $('llenar');
 const btnBorrar = $('borrar');
+const MAX_CAPTURAS = 100;
 
 let pestana = null;
 const casillas = []; // casillas[i] = input de la respuesta i + 1
+
+// Cola de candidatos (capturas.js)
+let capturas = [];
+let actualId = null;
+const actual = () => capturas.find((c) => c.id === actualId);
+
+// Cédula de la pestaña: solo en memoria; se guarda su huella y los últimos 4 caracteres.
+let cedulaPestana = null;
+let huellaPestana = null;
+let enPsicoweb = false;
+let licencia = { estado: 'sin-configurar', puedeLlenar: true };
 
 function armarRejilla() {
   const rejilla = $('rejilla');
@@ -85,35 +98,72 @@ function pegar(e, i) {
 
 const valores = () => casillas.map((c) => c.value);
 
-// De qué candidato son las respuestas: huella de la cédula (cedula.js), nunca la cédula.
-let dueno = null;          // huella guardada con las respuestas
-let huellaPestana = null;  // huella de la cédula abierta en la pestaña
-let llenasAntes = 0;
-const confirmarOtra = segundoClic(4000);
-
-const esDeOtra = () => esDeOtraCedula(dueno, huellaPestana) && casillas.some((c) => c.value);
-
-function avisoOtra() {
-  $('otra').hidden = !esDeOtra();
-}
-
-function cambio() {
-  const llenas = pintar();
-  // Una captura nueva (de 0 a la primera respuesta) queda ligada a la cédula abierta.
-  if (llenasAntes === 0 && llenas > 0) dueno = huellaPestana;
-  if (llenas === 0) dueno = null;
-  llenasAntes = llenas;
-  avisoOtra();
-  chrome.storage.local.set({ respuestas: valores(), dueno })
+function guardar() {
+  return chrome.storage.local.set({ capturas, actual: actualId })
     .catch((e) => estado('No se pudo guardar: ' + e.message, 'mal'));
 }
 
+const ligadaA = (huella, sinContar) => capturas.find((c) => c.huella === huella && c !== sinContar);
+
+// Una tecla en la rejilla: se guarda la captura. Si empieza (de 0 a la primera respuesta)
+// sin cédula y la pestaña tiene una que no es de otra captura, queda ligada a ella.
+function cambio() {
+  const c = actual();
+  const antes = llenasDe(c);
+  c.respuestas = valores();
+  c.llenada = null; // cambió: hay que volver a llenar
+  if (antes === 0 && llenasDe(c) > 0 && !c.huella && huellaPestana && !ligadaA(huellaPestana, c)) {
+    c.huella = huellaPestana;
+    c.pista = pistaDe(cedulaPestana);
+  }
+  pintar();
+  guardar();
+}
+
 function pintar() {
-  const llenas = casillas.filter((c) => c.value).length;
+  const c = actual();
+  const llenas = llenasDe(c);
   const contador = $('contador');
   contador.textContent = `${llenas} / ${TOTAL}`;
   contador.className = 'contador ' + (llenas === TOTAL ? 'ok' : '');
+
+  const lista = $('capturas');
+  lista.replaceChildren(...capturas.map((k) => {
+    const op = document.createElement('option');
+    op.value = k.id;
+    op.textContent = `${nombreCorto(k)} · ${llenasDe(k)}/60${k.llenada ? ' · ✓ llenada' : ''}`;
+    return op;
+  }));
+  lista.value = actualId;
+
+  if (document.activeElement !== $('nombre')) $('nombre').value = c.nombre;
+  const cedula = $('cedula');
+  cedula.placeholder = c.huella ? `✓ …${c.pista || ''}` : (huellaPestana ? 'la de la página' : 'escríbela');
+  cedula.title = c.huella ? 'Ligada. Escribe otra cédula para cambiarla.' : '';
+
+  const { motivo } = elegirCaptura([c], c.id, huellaPestana);
+  const otra = motivo === 'otra' && llenas > 0;
+  $('otra').hidden = !otra;
+  if (otra) {
+    // Si el candidato de la página ya está en la cola, se ofrece ir a su captura.
+    const suya = ligadaA(huellaPestana);
+    $('otraTexto').textContent = `Esta captura es de ${nombreCorto(c)}; la página es de otro candidato.`;
+    $('nuevaAqui').textContent = suya ? `Ir a ${nombreCorto(suya)}` : 'Nueva captura para esta cédula';
+  }
+
+  const llenadas = capturas.filter((k) => k.llenada).length;
+  $('quitarLlenadas').hidden = !llenadas;
+  $('quitarLlenadas').textContent = `Quitar llenadas (${llenadas})`;
+  btnLlenar.disabled = !enPsicoweb || !licencia.puedeLlenar;
   return llenas;
+}
+
+function mostrarCaptura(id) {
+  actualId = id;
+  const c = actual();
+  casillas.forEach((input, i) => { input.value = c.respuestas[i] || ''; });
+  confirmarOtra.cancelar();
+  pintar();
 }
 
 function estado(texto, tipo = '') {
@@ -122,16 +172,121 @@ function estado(texto, tipo = '') {
   p.className = 'estado ' + tipo;
 }
 
+// --- Cola ----------------------------------------------------------------------
+$('capturas').addEventListener('change', (e) => {
+  mostrarCaptura(e.target.value);
+  guardar();
+  estado('');
+  const vacia = casillas.findIndex((c) => !c.value);
+  enfocar(vacia === -1 ? 0 : vacia);
+});
+
+function agregarCaptura({ ligarPestana }) {
+  if (capturas.length >= MAX_CAPTURAS) {
+    estado(`Ya hay ${MAX_CAPTURAS} capturas. Quita las llenadas o borra alguna.`, 'mal');
+    return;
+  }
+  const c = nuevaCaptura(capturas);
+  if (ligarPestana && huellaPestana && !ligadaA(huellaPestana)) {
+    c.huella = huellaPestana;
+    c.pista = pistaDe(cedulaPestana);
+  }
+  capturas.push(c);
+  mostrarCaptura(c.id);
+  guardar();
+  estado('');
+  casillas[0].focus();
+}
+$('nueva').addEventListener('click', () => agregarCaptura({ ligarPestana: true }));
+// Del aviso de otra cédula: la captura del candidato abierto, o una nueva para él.
+$('nuevaAqui').addEventListener('click', () => {
+  const suya = ligadaA(huellaPestana);
+  if (!suya) return agregarCaptura({ ligarPestana: true });
+  mostrarCaptura(suya.id);
+  guardar();
+  estado('');
+});
+
+$('nombre').addEventListener('input', (e) => {
+  actual().nombre = e.target.value.trim() || 'Sin nombre';
+  pintar();
+  guardar();
+});
+$('nombre').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('cedula').focus(); });
+
+// Escribir la cédula a mano (capturas de un grupo antes de abrirlas en PsicoWeb).
+function ligarCedula() {
+  const input = $('cedula');
+  const cedula = input.value.trim().toUpperCase();
+  if (!cedula) return;
+  const huella = huellaCedula(cedula);
+  const otra = ligadaA(huella, actual());
+  if (otra) {
+    estado(`Esa cédula ya está en «${nombreCorto(otra)}».`, 'mal');
+    input.select();
+    return;
+  }
+  const c = actual();
+  c.huella = huella;
+  c.pista = pistaDe(cedula);
+  input.value = '';
+  pintar();
+  guardar();
+  estado(`Ligada a la cédula …${c.pista}.`, 'ok');
+}
+$('cedula').addEventListener('change', ligarCedula);
+$('cedula').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  ligarCedula();
+  const vacia = casillas.findIndex((c) => !c.value);
+  enfocar(vacia === -1 ? 0 : vacia);
+});
+
+// Borrar la captura abierta pide un segundo clic para no perderla por accidente.
+const confirmarBorrar = segundoClic(3000);
+btnBorrar.addEventListener('click', () => {
+  if (confirmarBorrar()) {
+    btnBorrar.textContent = '¿Seguro? Clic otra vez';
+    setTimeout(() => { btnBorrar.textContent = 'Borrar captura'; }, 3000);
+    return;
+  }
+  btnBorrar.textContent = 'Borrar captura';
+  quitar((c) => c.id === actualId);
+});
+
+const confirmarQuitar = segundoClic(3000);
+$('quitarLlenadas').addEventListener('click', () => {
+  if (confirmarQuitar()) {
+    estado('Se quitan las capturas ya llenadas en PsicoWeb. Clic otra vez para confirmar.', 'aviso');
+    return;
+  }
+  quitar((c) => c.llenada);
+});
+
+function quitar(condicion) {
+  const indice = capturas.findIndex((c) => c.id === actualId);
+  capturas = capturas.filter((c) => !condicion(c));
+  if (!capturas.length) capturas.push(nuevaCaptura([]));
+  const siguiente = capturas.find((c) => c.id === actualId) ||
+    capturas.find((c) => !c.llenada && llenasDe(c)) ||
+    capturas[Math.min(indice, capturas.length - 1)];
+  mostrarCaptura(siguiente.id);
+  guardar();
+  estado('');
+  casillas[0].focus();
+}
+
+// --- Pestaña ---------------------------------------------------------------------
 async function revisarPestana() {
   [pestana] = await chrome.tabs.query({ active: true, currentWindow: true });
   const pagina = $('pagina');
   let url = null;
   try { url = new URL(pestana?.url || ''); } catch { /* sin permiso para leer la URL */ }
 
-  if (!url || !url.hostname.endsWith('psicoweb.com')) {
+  enPsicoweb = Boolean(url && url.hostname.endsWith('psicoweb.com'));
+  if (!enPsicoweb) {
     pagina.textContent = 'Puedes capturar aquí; para llenar abre la captura del Raven en PsicoWeb.';
     pagina.className = 'pagina mal';
-    btnLlenar.disabled = true;
   } else if (!/\/Raven\/IntroducirRespuestas/i.test(url.pathname)) {
     pagina.textContent = 'Estás en PsicoWeb, pero esta no parece la captura del Raven.';
     pagina.className = 'pagina mal';
@@ -140,14 +295,24 @@ async function revisarPestana() {
     pagina.className = 'pagina';
     // Si la pestaña ya estaba abierta antes de instalar/recargar la extensión, Chrome no
     // le puso el botón. Se agrega aquí (boton.js no lo duplica si ya existe).
-    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: ['cedula.js', 'llenar.js', 'boton.js'] })
+    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: ['cedula.js', 'llenar.js', 'capturas.js', 'boton.js'] })
       .catch(() => {});
   }
-  if (url && url.hostname.endsWith('psicoweb.com')) {
-    const cedula = cedulaDe(url.href);
-    huellaPestana = cedula ? huellaCedula(cedula) : null;
+  // PsicoWeb también contesta por http: ahí las respuestas viajan sin cifrar.
+  if (enPsicoweb && url.protocol === 'http:') {
+    pagina.textContent = 'Conexión sin cifrar (http): las respuestas viajan sin protección.';
+    pagina.className = 'pagina mal';
+    $('https').hidden = false;
+    $('https').onclick = () => {
+      url.protocol = 'https:';
+      chrome.tabs.update(pestana.id, { url: url.href });
+      window.close();
+    };
   }
-  avisoOtra();
+  if (enPsicoweb) {
+    cedulaPestana = cedulaDe(url.href);
+    huellaPestana = cedulaPestana ? huellaCedula(cedulaPestana) : null;
+  }
 }
 
 // Primero la página principal; solo si ahí no están las casillas se busca en sus marcos
@@ -167,83 +332,132 @@ async function llenarPestana(respuestas) {
   return principal || { error: 'No se pudo llenar la página.' };
 }
 
-// Borrar pide un segundo clic para no perder la captura por accidente.
-const confirmarBorrar = segundoClic(3000);
-btnBorrar.addEventListener('click', async () => {
-  if (confirmarBorrar()) {
-    btnBorrar.textContent = '¿Seguro? Clic otra vez';
-    setTimeout(() => { btnBorrar.textContent = 'Borrar todo'; }, 3000);
-    return;
-  }
-  btnBorrar.textContent = 'Borrar todo';
-  await borrarTodo();
-});
-
-// «Empezar captura nueva» del aviso de otra cédula: ya es una decisión explícita.
-$('nueva').addEventListener('click', () => borrarTodo());
-
-async function borrarTodo() {
-  casillas.forEach((c) => { c.value = ''; });
-  dueno = null;
-  llenasAntes = 0;
-  pintar();
-  avisoOtra();
-  await chrome.storage.local.remove(['respuestas', 'dueno']).catch(() => {});
-  estado('');
-  casillas[0].focus();
-}
+const confirmarOtra = segundoClic(4000);
 
 btnLlenar.addEventListener('click', async () => {
-  const respuestas = valores();
-  if (respuestas.every((v) => !v)) return estado('No hay respuestas capturadas.', 'mal');
-  if (esDeOtra() && confirmarOtra()) {
+  const c = actual();
+  if (!llenasDe(c)) return estado('No hay respuestas capturadas.', 'mal');
+  licencia = await licenciaActual();
+  pintarLicencia();
+  if (!licencia.puedeLlenar) return estado('Sin licencia vigente no se puede llenar.', 'mal');
+  const { motivo } = elegirCaptura([c], c.id, huellaPestana);
+  if (motivo === 'otra' && confirmarOtra()) {
     return estado('Estas respuestas se capturaron para otra cédula. Clic otra vez en «Llenar página» para usarlas aquí.', 'aviso');
   }
   confirmarOtra.cancelar();
 
   btnLlenar.disabled = true;
   try {
-    const r = await llenarPestana(respuestas);
-    if (!r.error && huellaPestana) {
-      // Se llenaron en esta cédula: desde ahora son de este candidato.
-      dueno = huellaPestana;
-      avisoOtra();
-      chrome.storage.local.set({ dueno }).catch(() => {});
-    }
-    if (r.error) {
-      estado(r.error, 'mal');
-    } else if (r.enBlanco.length) {
+    const r = await llenarPestana(c.respuestas);
+    if (r.error) return estado(r.error, 'mal');
+    // Se llenaron en esta cédula: la captura queda ligada a ella y marcada como hecha.
+    capturas = marcarLlenada(capturas, c.id, huellaPestana, pistaDe(cedulaPestana));
+    guardar();
+    const pendientes = capturas.filter((k) => !k.llenada && llenasDe(k)).length;
+    const cola = pendientes ? ` Faltan ${pendientes} en la cola.` : '';
+    const vencida = licencia.estado === 'gracia' ? ' Tu licencia venció: renuévala.' : '';
+    if (r.enBlanco.length) {
       const lista = r.enBlanco.slice(0, 8).join(', ') + (r.enBlanco.length > 8 ? '…' : '');
-      estado(`Llené ${r.llenadas}; en blanco: ${lista}. Revisa y guarda en la página.`, 'aviso');
+      estado(`Llené ${r.llenadas}; en blanco: ${lista}. Revisa y guarda en la página.${cola}${vencida}`, 'aviso');
     } else {
-      estado(`Listo: ${r.llenadas} casillas llenadas. Revisa y guarda en la página.`, 'ok');
+      estado(`Listo: ${r.llenadas} casillas llenadas. Revisa y guarda en la página.${cola}${vencida}`, 'ok');
     }
   } catch (e) {
     estado('Error al llenar: ' + e.message, 'mal');
   } finally {
-    btnLlenar.disabled = false;
+    pintar();
   }
 });
 
+// --- Licencia (licencia.js) ----------------------------------------------------------
+function pintarLicencia() {
+  const { estado: e, cliente, vence, dias } = licencia;
+  const panel = $('licencia');
+  const texto = $('licenciaTexto');
+  const fecha = vence ? fechaLegible(vence) : '';
+  const mensajes = {
+    falta: ['Activa la extensión con la clave de licencia que te dieron.', ''],
+    invalida: ['La clave de licencia guardada no es válida. Pega la clave correcta.', 'mal'],
+    'por-vencer': [`Tu licencia vence el ${fecha} (${dias === 0 ? 'hoy' : `en ${dias} ${dias === 1 ? 'día' : 'días'}`}). Para renovarla: ${LICENCIA_CONTACTO}`, 'aviso'],
+    gracia: [`Tu licencia venció el ${fecha}. Seguirá llenando ${LICENCIA_GRACIA_DIAS + dias} ${LICENCIA_GRACIA_DIAS + dias === 1 ? 'día' : 'días'} más. Para renovarla: ${LICENCIA_CONTACTO}`, 'mal'],
+    vencida: [`Tu licencia venció el ${fecha}. Ya no se puede llenar; puedes seguir capturando. Para renovarla: ${LICENCIA_CONTACTO}`, 'mal'],
+  };
+  const aviso = mensajes[e];
+  panel.hidden = !aviso;
+  if (aviso) {
+    texto.textContent = aviso[0];
+    panel.className = 'licencia ' + aviso[1];
+  }
+  $('activar').hidden = !aviso || e === 'por-vencer';
+  $('licenciaPie').textContent = cliente && (e === 'vigente' || e === 'por-vencer')
+    ? `Licencia: ${cliente} · vence el ${fecha}` : '';
+  $('cambiarClave').hidden = !cliente || !$('activar').hidden;
+  pintar();
+}
+
+$('cambiarClave').addEventListener('click', () => {
+  $('licencia').hidden = false;
+  $('licenciaTexto').textContent = 'Pega la clave nueva.';
+  $('licencia').className = 'licencia';
+  $('activar').hidden = false;
+  $('cambiarClave').hidden = true;
+  $('clave').focus();
+});
+
+$('guardarClave').addEventListener('click', async () => {
+  const clave = $('clave').value;
+  if (!clave.trim()) return $('clave').focus();
+  const { licencia: anterior } = await chrome.storage.local.get('licencia');
+  await chrome.storage.local.set({ licencia: clave.replace(/\s+/g, '') });
+  const r = await licenciaActual();
+  if (r.estado === 'invalida' || r.estado === 'vencida' || r.estado === 'falta') {
+    await chrome.storage.local.set({ licencia: anterior ?? null });
+    const motivo = r.estado === 'vencida' ? `Esa clave venció el ${fechaLegible(r.vence)}.` : 'Esa clave no es válida: revisa que esté completa.';
+    $('licenciaTexto').textContent = motivo;
+    $('licencia').className = 'licencia mal';
+    return;
+  }
+  licencia = r;
+  $('clave').value = '';
+  pintarLicencia();
+  estado(`Licencia activada: ${r.cliente}, vence el ${fechaLegible(r.vence)}.`, 'ok');
+});
+
+// --- Arranque ----------------------------------------------------------------------
 (async () => {
   armarRejilla();
   try {
-    let { respuestas, lista, dueno: guardado } = await chrome.storage.local.get(['respuestas', 'lista', 'dueno']);
-    dueno = typeof guardado === 'string' ? guardado : null;
-    if (!respuestas && lista) {
-      // Versión anterior guardaba el texto pegado.
-      respuestas = analizar(lista).respuestas;
-      await chrome.storage.local.set({ respuestas });
-      await chrome.storage.local.remove('lista');
-    }
-    if (Array.isArray(respuestas)) {
-      respuestas.forEach((v, i) => { if (casillas[i]) casillas[i].value = String(v ?? '').replace(/\D/g, '').slice(-1); });
+    const guardado = await chrome.storage.local.get(['capturas', 'actual', 'respuestas', 'dueno', 'lista']);
+    const migrado = migrarCapturas(guardado, analizar);
+    if (migrado) {
+      // Versiones anteriores guardaban una sola captura ({ respuestas, dueno }).
+      ({ capturas, actual: actualId } = migrado);
+      await chrome.storage.local.set(migrado);
+      await chrome.storage.local.remove(['respuestas', 'dueno', 'lista']);
+    } else {
+      capturas = guardado.capturas;
+      actualId = guardado.actual;
     }
   } catch (e) {
     estado('No se pudieron leer las respuestas guardadas: ' + e.message, 'mal');
   }
-  llenasAntes = pintar();
+  if (!capturas.length) capturas.push(nuevaCaptura([]));
+  if (!actual()) actualId = capturas[capturas.length - 1].id;
+
   await revisarPestana();
+  // Abierta en la captura de un candidato de la cola: se muestran sus respuestas.
+  const propia = huellaPestana && capturas.find((c) => c.huella === huellaPestana);
+  if (propia && propia.id !== actualId) {
+    actualId = propia.id;
+    guardar();
+  }
+  mostrarCaptura(actualId);
+  if (propia) estado(`Respuestas de «${nombreCorto(propia)}» para esta cédula.`);
+
+  try { licencia = await licenciaActual(); } catch (e) { licencia = { estado: 'invalida', puedeLlenar: false }; }
+  pintarLicencia();
+  document.documentElement.dataset.listo = 'si'; // para las pruebas
+  if (licencia.estado === 'falta') return $('clave').focus();
   const primeraVacia = casillas.findIndex((c) => !c.value);
   enfocar(primeraVacia === -1 ? 0 : primeraVacia);
 })();

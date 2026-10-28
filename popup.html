@@ -12,28 +12,55 @@
       <span id="contador" class="contador">0 / 60</span>
     </header>
 
-    <p id="pagina" class="pagina"></p>
+    <div class="linea">
+      <p id="pagina" class="pagina"></p>
+      <button id="https" class="secundario chico" type="button" hidden>Abrir con https</button>
+    </div>
+
+    <section id="licencia" class="licencia" hidden>
+      <p id="licenciaTexto"></p>
+      <div id="activar" class="activar" hidden>
+        <textarea id="clave" rows="2" spellcheck="false" placeholder="Pega aquí tu clave de licencia (empieza con RAVEN1.)"></textarea>
+        <button id="guardarClave" class="primario" type="button">Activar</button>
+      </div>
+    </section>
+
+    <div class="cola">
+      <select id="capturas" aria-label="Captura"></select>
+      <button id="nueva" class="secundario chico" type="button" title="Capturar otro candidato">+ Nueva</button>
+    </div>
+    <div class="ficha">
+      <label>Nombre <input id="nombre" maxlength="40" autocomplete="off" placeholder="Opcional"></label>
+      <label>Cédula <input id="cedula" autocomplete="off" spellcheck="false"></label>
+    </div>
 
     <div id="otra" class="otra" hidden>
-      <span>Estas respuestas se capturaron para <strong>otro candidato</strong> (otra cédula).</span>
-      <button id="nueva" class="secundario" type="button">Empezar captura nueva</button>
+      <span id="otraTexto"></span>
+      <button id="nuevaAqui" class="secundario" type="button">Nueva captura para esta cédula</button>
     </div>
 
     <div id="rejilla" class="rejilla"></div>
 
-    <p class="ayuda">Escribe un número y salta sola a la siguiente; se guarda al momento. En la página del Raven también tienes el botón «Llenar respuestas».</p>
+    <p class="ayuda">Escribe un número y salta sola a la siguiente; se guarda al momento. Para aplicaciones en grupo, captura a cada candidato con «+ Nueva» y su cédula: al abrir su captura en PsicoWeb se usan sus respuestas solas.</p>
 
     <div class="botones">
-      <button id="borrar" class="secundario" type="button">Borrar todo</button>
+      <button id="borrar" class="secundario" type="button">Borrar captura</button>
       <button id="llenar" class="primario" type="button">Llenar página</button>
     </div>
 
     <p id="estado" class="estado"></p>
+    <p class="pie">
+      <span id="licenciaPie"></span>
+      <button id="quitarLlenadas" class="enlace" type="button" hidden></button>
+      <button id="cambiarClave" class="enlace" type="button" hidden>Cambiar clave</button>
+    </p>
   </main>
 
   <script src="cedula.js"></script>
   <script src="analizar.js"></script>
   <script src="llenar.js"></script>
+  <script src="capturas.js"></script>
+  <script src="licencia.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

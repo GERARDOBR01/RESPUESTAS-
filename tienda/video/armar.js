@@ -7,6 +7,47 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 
 const CLIPS = path.join(__dirname, 'clips');
+const AUDIO = path.join(__dirname, 'audio'); // música y efectos (ver audio/CREDITOS.md)
+
+// Pico de cada efecto desde el inicio del archivo (npx hyperframes audio --only moments):
+// el archivo arranca antes para que el golpe caiga un cuadro después de la imagen.
+const PICO = { click: 0.073, 'key-press': 0.05, pop: 0.12, whoosh: 0.162, 'impact-bass-1': 0.073, chime: 0.05, sparkle: 0.1, error: 0.05 };
+const DURA = { click: 0.37, 'key-press': 0.43, pop: 0.72, whoosh: 0.57, 'impact-bass-1': 2.12, chime: 2.54, sparkle: 1.8, error: 1.62, 'tecleo-6s': 5.64, 'tecleo-4s': 4.0 };
+const CUADRO = 1 / 30;
+
+// Música: entra en el compás fuerte justo antes del corte (8.97 s) para que el clic de
+// «Llenar» (12.97 s) caiga en un tiempo fuerte (120 bpm). La escena «a mano» va sin música.
+const MUSICA = { inicio: 8.97, volumen: 0.75 };
+
+// Efectos: [archivo, momento en la imagen (s), volumen]. Cada uno tiene su causa en pantalla.
+// Se reparten en cuatro carriles (9–12) porque algunos se enciman a propósito.
+function efectos(tecleo) {
+  const lista = [];
+  // 1 · A mano: clic en la casilla y tecla, nueve veces.
+  for (const t of tecleo) lista.push(['click', t - 0.3, 1.6], ['key-press', t, 1.8]);
+  lista.push(
+    ['whoosh', 9.3, 0.55],            // 2 · sube la tinta
+    ['whoosh', 11.05, 0.35],          //     y se va
+    ['click', 12.9, 1.6],             // 3 · clic en «Llenar»
+    ['impact-bass-1', 12.97, 0.35],   //     las 60 escritas
+    ['key-press', 16.6, 1.6], ['key-press', 16.65, 1.6], ['key-press', 16.7, 1.6], // Alt+Shift+L
+    ['pop', 20.2, 0.6],               // 4 · se abre el popup
+    ['tecleo-6s', 20.7, 1.2],         //     las 60 tecleadas
+    ['whoosh', 28.5, 0.35],           //     la columna de Excel vuela
+    ['pop', 28.93, 0.7],              //     y se pega
+    ['click', 32.5, 1.6], ['pop', 32.57, 0.5],   // 5 · Beto
+    ['click', 36.4, 1.6], ['pop', 36.47, 0.5],   //     Ana
+    ['pop', 38.7, 0.6],               // 6 · popup otra vez
+    ['click', 39.8, 1.6],             //     Verificar
+    ['tecleo-4s', 40.3, 1.1],         //     segunda captura
+    ['error', 40.83, 2.0],            //     la 17 no coincide
+    ['click', 45.4, 1.6],             //     Terminar verificación
+    ['key-press', 47.1, 1.6], ['chime', 47.13, 0.7], // corregida
+    ['whoosh', 48.55, 0.45],          // 7 · se va la ventana
+    ['sparkle', 53.35, 0.35],          // 8 · llega el logo
+  );
+  return lista;
+}
 const RAIZ = path.resolve(__dirname, '..', '..');
 const DURACION = 60;
 
@@ -305,6 +346,12 @@ function composicion(nombre, f) {
       <div id="s2-flood" class="clip" data-start="9.3" data-duration="2.1"><div id="s2-tinta"></div></div>
       ${lineas}
       ${cierreLogo}
+      <audio id="musica" class="clip" src="assets/audio/musica.mp3" data-start="${MUSICA.inicio}" data-duration="${(DURACION - MUSICA.inicio).toFixed(2)}" data-volume="${MUSICA.volumen}" data-track-index="8"></audio>
+      ${efectos(datos.tecleo).map(([archivo, t, vol], i) => {
+        const inicio = Math.max(0, t + CUADRO - (PICO[archivo] || 0));
+        const dur = Math.min(DURA[archivo], DURACION - inicio);
+        return `<audio id="sfx-${i}" class="clip" src="assets/audio/${archivo}.mp3" data-start="${inicio.toFixed(3)}" data-duration="${dur.toFixed(2)}" data-volume="${vol}" data-track-index="${9 + (i % 4)}"></audio>`;
+      }).join('\n      ')}
     </div>
     <script>
       const D = ${JSON.stringify(datos)};
@@ -400,6 +447,8 @@ for (const [nombre, f] of Object.entries(FORMATOS)) {
   const proyecto = path.join(__dirname, f.carpeta);
   fs.rmSync(path.join(proyecto, 'assets', 'clips'), { recursive: true, force: true });
   fs.cpSync(CLIPS, path.join(proyecto, 'assets', 'clips'), { recursive: true });
+  fs.rmSync(path.join(proyecto, 'assets', 'audio'), { recursive: true, force: true });
+  fs.cpSync(AUDIO, path.join(proyecto, 'assets', 'audio'), { recursive: true });
   fs.writeFileSync(path.join(proyecto, 'index.html'), composicion(nombre, f));
   console.log(`tienda/video/${f.carpeta}/index.html · ${f.w}×${f.h}`);
 }

@@ -10,9 +10,12 @@
 - Cuadros clave de los mp4 ya decodificados: 0, 13.3, 29, 44 y 58 s.
 - El contacto se lee en 9:16.
 
-**Nadie lo revisó**
-- El video no tiene sonido. Fue a propósito (el aviso `film_silent` se dejó así).
-- Para ponerle música: la skill ai-music con `RUNCOMFY_TOKEN`, o una pista propia como `<audio id="musica">` en `armar.js`.
+**Sonido (medido, no escuchado)**
+- La mezcla final queda en −15.1 LUFS con pico de −1.2 dBTP.
+- Los golpes caen con la imagen: el clic de «Llenar» a 12.905 s y las teclas Alt+Shift+L a 16.65, 16.70 y 16.76 s.
+- De 0 a 9 s (a mano) va más bajo a propósito: −24 LUFS, contra −14.7 con música.
+- Nadie lo ha oído: falta escucharlo para confirmar el gusto de la música y el volumen de los efectos.
+- La música es CC BY 3.0 y **hay que dar el crédito** al publicar (`audio/CREDITOS.md`).
 
 **La toma más débil**
 - En 9:16 el popup se ve chico (583 px de ancho). Con más tiempo, haría tomas propias del popup a pantalla completa.

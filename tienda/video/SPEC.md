@@ -2,7 +2,21 @@
 
 GOAL:    Quien captura el Raven en PsicoWeb ve que deja de teclear las 60 casillas a mano: un clic las escribe todas. Al final sabe a quién escribirle.
 OUTPUT:  HyperFrames. index.html es 1920×1080 y vertical.html es 1080×1920, ambos a 30 fps. Los dos los genera `../armar.js`; no se editan a mano.
-TIME:    60 s × 30 = 1800 cuadros. Sin música ni voz (el usuario no la pidió, y ai-music necesita RUNCOMFY_TOKEN).
+TIME:    60 s × 30 = 1800 cuadros. Música a 120 bpm, 15 cuadros por tiempo.
+SOUND:   - Sin voz.
+         - De 0 a 9 s, sin música: solo los clics y las teclas de hacerlo a mano, que es la tensión.
+         - La música («Upbeat Corporate», CC BY 3.0) entra en el compás fuerte de 8.97 s, así el clic de «Llenar» (12.97 s) cae en tiempo.
+         - Cada efecto tiene su causa en pantalla:
+           - clic: cada clic del cursor;
+           - tecla: Alt+Shift+L y la corrección;
+           - tecleo: las 60 capturadas;
+           - pop: el popup, el pegado y el aviso del botón;
+           - whoosh: el flood y la salida de la ventana;
+           - impacto: las 60 escritas, una sola vez;
+           - error: la casilla 17 en rojo;
+           - chime: la verificación;
+           - sparkle: el logo.
+         - Mezcla final a −15 LUFS y −1.5 dBTP (render.js).
 LOOK:    - Fondo: el del popup de la extensión, #eef1f6 con dos manchas radiales de la marca: rojo #e5484d al 22 % arriba a la izquierda y azul #1e88e5 al 25 % abajo a la derecha.
          - Tinta #1d2433, texto secundario #5b6475. Acento rojo #e5484d (la pieza que falta del logo), solo en la palabra clave de cada escena y en el cierre. Azul #1e88e5 solo dentro de la UI.
          - Tipografía Inter: títulos en 700, 72 px (16:9) o 92 px (9:16), tracking −2 %; texto en 400, 38 px o 48 px.

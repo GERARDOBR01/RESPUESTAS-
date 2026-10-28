@@ -25,11 +25,14 @@ Todo lo que pide el formulario del panel de desarrollador
 > extensión real. Se regenera así:
 > 1. `node tienda/video/grabar.js` graba los clips de la interfaz.
 > 2. `node tienda/video/armar.js` arma los proyectos de HyperFrames.
-> 3. En `tienda/video/horizontal` y en `tienda/video/vertical`, corre
->    `npx hyperframes render --quality delivery -o ../../../dist/video/<nombre>.mp4`.
+> 3. `node tienda/video/render.js` deja los dos mp4 en `dist/video/`, con el audio ajustado
+>    a −15 LUFS.
 >
 > El guion y el estilo están en `tienda/video/SPEC.md`. La tienda pide el video como enlace de
 > YouTube: súbelo como «No listado» y pega el enlace en la ficha.
+> **Crédito de la música (obligatorio):** ponlo en la descripción de YouTube o del post:
+> «Música: "Upbeat Corporate" de Soundrider/Dope (Jamendo), licencia CC BY 3.0». Más detalle en
+> `tienda/video/audio/CREDITOS.md`.
 
 ## Datos de la ficha
 

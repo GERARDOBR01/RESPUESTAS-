@@ -7,5 +7,6 @@ emitidas.csv
 # Video (tienda/video): clips grabados, copias por proyecto y cachés de HyperFrames
 tienda/video/clips/
 tienda/video/*/assets/clips/
+tienda/video/*/assets/audio/
 tienda/video/*/.hyperframes/
 tienda/video/*/renders/

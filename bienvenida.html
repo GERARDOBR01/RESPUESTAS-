@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Raven · respuestas — Bienvenida</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="bienvenida.css">
+</head>
+<body class="bienvenida">
+  <main class="vidrio">
+    <header>
+      <img class="logo" src="iconos/icono-48.png" alt="" width="22" height="22">
+      <h1>Raven · respuestas está instalada</h1>
+    </header>
+    <p class="pagina">Tres pasos y queda lista. Esta página no se vuelve a abrir sola.</p>
+
+    <ol class="pasos">
+      <li id="paso-fijar">
+        <h2>Fija el ícono en la barra</h2>
+        <p>Arriba a la derecha de Chrome, clic en la pieza de rompecabezas
+          <span class="tecla">🧩</span> y luego en la chincheta <span class="tecla">📌</span> junto a
+          «Raven · llenar respuestas». Así lo tienes siempre a la mano.</p>
+      </li>
+      <li id="paso-licencia">
+        <h2>Activa tu licencia</h2>
+        <p id="licenciaTexto">Pega la clave que te mandaron (empieza con RAVEN1.).</p>
+        <div class="activar">
+          <textarea id="clave" rows="3" spellcheck="false" placeholder="RAVEN1.…"></textarea>
+          <button id="guardarClave" class="primario" type="button">Activar</button>
+        </div>
+      </li>
+      <li id="paso-usar">
+        <h2>Úsala en PsicoWeb</h2>
+        <p>Abre la captura del Raven de un candidato. Clic en el ícono para capturar las 60
+          respuestas y luego en «Llenar página» (o en el botón «Llenar respuestas» que aparece en
+          la página). Revisa y guarda en PsicoWeb como siempre: la extensión no guarda por ti.</p>
+        <p>¿Aplicación en grupo? En la extensión usa «+ Nueva» para cada candidato y escribe su
+          cédula: al abrir la captura de cada uno, sus respuestas se usan solas.</p>
+      </li>
+    </ol>
+    <p class="pie"><span id="contacto"></span></p>
+  </main>
+  <script src="licencia.js"></script>
+  <script src="bienvenida.js"></script>
+</body>
+</html>

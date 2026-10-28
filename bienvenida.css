@@ -1,0 +1,11 @@
+body.bienvenida { width: auto; min-height: 100vh; padding: 32px 16px; font-size: 14px; }
+.bienvenida main { max-width: 640px; margin: 0 auto; padding: 24px; }
+.bienvenida h1 { font-size: 18px; }
+.pasos { margin: 16px 0 0; padding-left: 22px; }
+.pasos li { margin-bottom: 18px; }
+.pasos li.hecho h2::after { content: " ✓"; color: #1a7f37; }
+.pasos h2 { margin: 0 0 4px; font-size: 15px; }
+.pasos p { margin: 0 0 6px; color: var(--texto); }
+.tecla { display: inline-block; padding: 0 4px; border-radius: 5px; background: var(--campo); }
+#licenciaTexto.ok { color: #1a7f37; }
+#licenciaTexto.mal { color: var(--rojo); }

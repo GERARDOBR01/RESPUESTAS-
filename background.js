@@ -9,3 +9,8 @@ chrome.runtime.onMessage.addListener((mensaje, _remitente, responder) => {
     .catch((e) => responder({ estado: 'error', puedeLlenar: false, error: e.message }));
   return true; // responde después
 });
+
+// Al instalar (no al actualizar) se abre la bienvenida: fijar el ícono y activar la licencia.
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  if (reason === 'install') chrome.tabs.create({ url: 'bienvenida.html' });
+});

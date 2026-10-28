@@ -71,7 +71,20 @@ const fechaEn = (dias) => {
       assert.deepEqual(medida, [+t, +t], `ícono ${t}`);
     }
     await ext.close();
-    ok(`extensión cargada (${yo.version}, sin errores de manifest, íconos ${Object.keys(manifest.icons).join('/')})`);
+    // Al instalar se abre la bienvenida con la activación
+    let bienvenida = ctx.pages().find((p) => p.url().endsWith('/bienvenida.html'));
+    for (let i = 0; !bienvenida && i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      bienvenida = ctx.pages().find((p) => p.url().endsWith('/bienvenida.html'));
+    }
+    assert.ok(bienvenida, 'se abrió la bienvenida al instalar');
+    await bienvenida.waitForLoadState();
+    await bienvenida.fill('#clave', 'RAVEN1.mala.clave');
+    await bienvenida.click('#guardarClave');
+    await bienvenida.waitForFunction(() => /no es válida/.test(document.getElementById('licenciaTexto').textContent));
+    assert.match(await bienvenida.textContent('#contacto'), /Soporte:/);
+    await bienvenida.close();
+    ok(`extensión cargada (${yo.version}, sin errores de manifest, íconos ${Object.keys(manifest.icons).join('/')}); abre la bienvenida`);
 
     // --- Botón en la página, sin respuestas
     const raven = await ctx.newPage();

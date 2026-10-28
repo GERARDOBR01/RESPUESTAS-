@@ -15,7 +15,7 @@ $carpeta = Join-Path $temporal 'raven-llenar-respuestas'
 if (Test-Path $temporal) { Remove-Item -Recurse -Force $temporal }
 New-Item -ItemType Directory -Force $carpeta | Out-Null
 
-$archivos = 'manifest.json', 'background.js', 'popup.html', 'popup.css', 'popup.js', 'llenar.js', 'analizar.js', 'boton.js', 'cedula.js', 'capturas.js', 'licencia.js', 'LICENSE', 'INSTALAR.txt'
+$archivos = 'manifest.json', 'background.js', 'popup.html', 'popup.css', 'popup.js', 'bienvenida.html', 'bienvenida.css', 'bienvenida.js', 'llenar.js', 'analizar.js', 'boton.js', 'cedula.js', 'capturas.js', 'licencia.js', 'LICENSE', 'INSTALAR.txt'
 foreach ($a in $archivos) { Copy-Item (Join-Path $raiz $a) $carpeta }
 Copy-Item -Recurse (Join-Path $raiz 'iconos') $carpeta
 

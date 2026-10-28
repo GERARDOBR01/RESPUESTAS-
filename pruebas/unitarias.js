@@ -153,8 +153,12 @@ function pruebasArchivos() {
     manifest.background.service_worker,
     manifest.action.default_popup,
   ]);
-  const html = fs.readFileSync(path.join(RAIZ, 'popup.html'), 'utf8');
-  for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css))"/g)) usados.add(m[1]);
+  // bienvenida.html la abre background.js al instalar
+  usados.add('bienvenida.html');
+  for (const pagina of ['popup.html', 'bienvenida.html']) {
+    const html = fs.readFileSync(path.join(RAIZ, pagina), 'utf8');
+    for (const m of html.matchAll(/(?:src|href)="([^"]+\.(?:js|css|png))"/g)) usados.add(m[1]);
+  }
   const fondo = fs.readFileSync(path.join(RAIZ, manifest.background.service_worker), 'utf8');
   for (const m of fondo.matchAll(/importScripts\('([^']+)'\)/g)) usados.add(m[1]);
   const popup = fs.readFileSync(path.join(RAIZ, 'popup.js'), 'utf8');
@@ -166,7 +170,8 @@ function pruebasArchivos() {
   const lista = /\$archivos = (.+)/.exec(empaque)[1];
   for (const archivo of usados) {
     assert.ok(fs.existsSync(path.join(RAIZ, archivo)), `existe ${archivo}`);
-    assert.ok(lista.includes(`'${archivo}'`), `empaquetar.ps1 incluye ${archivo}`);
+    const enCarpeta = archivo.startsWith('iconos/') && empaque.includes("Join-Path $raiz 'iconos'");
+    assert.ok(enCarpeta || lista.includes(`'${archivo}'`), `empaquetar.ps1 incluye ${archivo}`);
   }
   console.log(`✓ archivos: ${usados.size} usados por Chrome, todos existen y van en el .zip`);
 }

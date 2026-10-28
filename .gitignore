@@ -1,1 +1,5 @@
 dist/
+# Llaves de licencia: nunca al repositorio
+*.pem
+.raven-licencias/
+emitidas.csv

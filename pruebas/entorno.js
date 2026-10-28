@@ -2,14 +2,13 @@
 // No hay node_modules aquí a propósito: Chrome carga esta carpeta como extensión.
 // Playwright se toma de PLAYWRIGHT_DIR o de una instalación de Node que ya lo tenga.
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // EXTENSION_DIR permite probar otra copia (p. ej. el .zip de entrega descomprimido).
 const RAIZ = process.env.EXTENSION_DIR ? path.resolve(process.env.EXTENSION_DIR) : path.resolve(__dirname, '..');
 
 function cargarPlaywright() {
-  const candidatos = [process.env.PLAYWRIGHT_DIR, 'playwright', path.join(os.homedir(), 'jobbot', 'node_modules', 'playwright')];
+  const candidatos = [process.env.PLAYWRIGHT_DIR, 'playwright'];
   for (const c of candidatos.filter(Boolean)) {
     try { return require(c); } catch { /* siguiente */ }
   }

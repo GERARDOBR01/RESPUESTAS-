@@ -1,0 +1,17 @@
+MUESTRAS REALES DE LA CAPTURA DEL RAVEN
+=======================================
+Las pruebas (node pruebas/unitarias.js) llenan cada archivo .html de esta carpeta y
+comprueban que se reconocen las 60 casillas, que la página acepta los valores y que
+cada número cae en su lugar (12 por serie, series A–E de izquierda a derecha).
+
+Sirve para enterarse por las pruebas, y no por un cliente, si PsicoWeb cambia la página.
+
+Cómo agregar una muestra
+1. Abre en PsicoWeb la captura del Raven (de preferencia de un candidato de prueba).
+2. Ctrl+S → «Página web, solo HTML» y guárdala aquí, p. ej. psicoweb-2026-10.html
+3. Abre el archivo con un editor y BORRA los datos del candidato: nombre, cédula,
+   edad, correo y cualquier respuesta ya escrita (deja los value="" vacíos).
+   Busca también la cédula en la URL de los formularios (action="...cedula=...").
+4. Corre node pruebas/unitarias.js y confirma «✓ llenar · muestra real ...».
+
+No subas nunca una muestra con datos de un candidato real.

@@ -2,36 +2,69 @@ RAVEN · LLENAR RESPUESTAS — Guía de instalación y uso
 =====================================================
 
 INSTALAR (una vez por computadora, en Google Chrome)
-1. Descomprime el .zip y mueve la carpeta «raven-llenar-respuestas» a un lugar fijo,
-   por ejemplo C:\Herramientas\raven-llenar-respuestas
-   (no la dejes en Descargas ni la borres después: Chrome la usa desde ahí).
-2. En Chrome abre la dirección:  chrome://extensions
-3. Activa «Modo de desarrollador» (interruptor arriba a la derecha).
-4. Clic en «Cargar descomprimida» y elige la carpeta del paso 1.
-5. Clic en la pieza de rompecabezas de la barra de Chrome y fija (chincheta)
-   «Raven · llenar respuestas» para tener el ícono a la mano.
 
-USAR
+  Si te mandaron un ENLACE de la Chrome Web Store (recomendado):
+  1. Ábrelo en Chrome y clic en «Agregar a Chrome».
+  2. Se abre sola una página de bienvenida: sigue sus 3 pasos (fijar el ícono,
+     pegar tu clave de licencia, abrir PsicoWeb). Listo.
+     Las actualizaciones llegan solas.
+
+  Si te mandaron un archivo .ZIP:
+  1. Descomprime el .zip y mueve la carpeta «raven-llenar-respuestas» a un lugar fijo,
+     por ejemplo C:\Herramientas\raven-llenar-respuestas
+     (no la dejes en Descargas ni la borres después: Chrome la usa desde ahí).
+  2. En Chrome abre la dirección:  chrome://extensions
+  3. Activa «Modo de desarrollador» (interruptor arriba a la derecha).
+  4. Clic en «Cargar descomprimida» y elige la carpeta del paso 1.
+  5. Se abre la página de bienvenida: fija el ícono y pega tu clave de licencia.
+
+LICENCIA
+  - La clave te llega por correo o WhatsApp y empieza con RAVEN1.  Cópiala completa.
+  - La extensión te avisa 7 días antes de que venza. Si vence, sigue llenando 7 días más
+    para que no te quedes a medias; después solo deja capturar hasta que pegues la clave
+    nueva (en la extensión: «Cambiar clave»).
+  - No necesita internet para comprobar la licencia.
+
+USAR — UN CANDIDATO
 1. Abre en PsicoWeb la captura del Raven del candidato.
 2. Clic en el ícono de la extensión: aparecen las 60 casillas (A–E, 12 por columna).
    - Escribe el número y salta sola a la siguiente. Se guarda al momento.
    - Enter / ↓ siguiente · ↑ anterior · → / ← cambia de serie · Backspace regresa.
    - También puedes pegar una columna de Excel en cualquier casilla.
-3. Clic en «Llenar página», o en el botón «Llenar respuestas» que aparece abajo a la
-   derecha de la página (se puede arrastrar si estorba).
+3. Clic en «Llenar página», o en el botón «Llenar» que aparece abajo a la derecha de la
+   página (se puede arrastrar si estorba), o el atajo de teclado  Alt+Shift+L .
+   (Alt+Shift+K abre la extensión. Se cambian en chrome://extensions/shortcuts)
 4. Revisa las respuestas en la página y guarda en PsicoWeb como siempre.
    La extensión no guarda ni envía nada por ti.
-5. Al terminar con un candidato, «Borrar todo» (pide un segundo clic).
-   Si se te olvida: la extensión recuerda de qué candidato (cédula) son las respuestas.
-   Al abrir otro candidato avisa «otra cédula» y ofrece «Empezar captura nueva»; para
-   llenar de todos modos pide un segundo clic.
+
+USAR — APLICACIÓN EN GRUPO (varios candidatos)
+1. En la extensión, para cada hoja de respuestas:
+   «+ Nueva» → escribe el nombre (opcional) y la CÉDULA del candidato → Enter →
+   captura sus 60 respuestas.
+2. En PsicoWeb abre la captura de cada candidato: el botón de la página ya dice su nombre.
+   Clic en «Llenar», revisa y guarda. Queda marcado «✓ llenada» y te dice cuántos faltan.
+3. Al terminar el grupo: «Quitar llenadas» (abajo en la extensión, pide un segundo clic).
+
+DOBLE CAPTURA (para no tener errores de dedo)
+1. Ya capturadas las 60, clic en «Verificar» y vuelve a teclearlas de la hoja.
+   La rejilla aparece vacía; si una no coincide con la primera se pone roja.
+2. Clic en «Terminar verificación»: te dice cuáles difieren. Cada casilla roja muestra
+   lo que tecleaste la 2ª vez; mira la hoja y escribe el valor correcto.
+3. Cuando ya no hay rojas, la captura dice «verificada». Si llenas con diferencias
+   pendientes, la extensión te pide un segundo clic.
+
+AVISO DE OTRO CANDIDATO
+   Si las respuestas abiertas son de otra cédula, la extensión lo avisa y pide un segundo
+   clic para llenar de todos modos (o te ofrece ir a la captura correcta).
 
 SI ALGO NO FUNCIONA
 - El botón dice «La extensión se actualizó: recarga la página»: presiona F5.
 - Dice «No reconocí las 60 casillas»: confirma que estás en la captura del Raven.
-- Para actualizar a una versión nueva: reemplaza el contenido de la carpeta y presiona
-  la flecha circular (↻) de la extensión en chrome://extensions. No uses «Quitar»:
-  borra las respuestas guardadas.
+- Dice «Conexión sin cifrar (http)»: usa el botón «Abrir con https».
+- Dice «Activa tu licencia»: abre la extensión y pega tu clave.
+- Si la instalaste con .zip y quieres actualizar: reemplaza el contenido de la carpeta y
+  presiona la flecha circular (↻) de la extensión en chrome://extensions.
+  No uses «Quitar»: borra las capturas guardadas y la licencia.
 
 Soporte: Gerardo Barrera · 33 2263 4262 · jesusgerardobarrerasolis@gmail.com
 

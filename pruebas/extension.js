@@ -1,30 +1,54 @@
 // Prueba de punta a punta con la extensión cargada de verdad en Chromium:
-// content script, popup, chrome.storage, chrome.scripting y recarga de la extensión.
+// content script, popup, service worker, chrome.storage, chrome.scripting y recarga.
 // La página de PsicoWeb se sustituye por una falsa (misma URL, sin datos reales).
+// Se prueba una copia de la extensión con una llave de licencia de prueba (la real no
+// está en el repo); todo lo demás es el código tal cual.
 // Uso: node pruebas/extension.js
 const assert = require('assert');
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { RAIZ, cargarPlaywright, rutaChromium, paginaFalsa } = require('./entorno');
+const { firmarClave, publicaJwk, escribirPublica } = require('../herramientas/licencia.js');
+const { huellaCedula } = require('../cedula.js');
 
-const URL_RAVEN = 'https://app.psicoweb.com/Raven/IntroducirRespuestas?cedula=PRUEBA';
+const BASE = 'https://app.psicoweb.com/Raven/IntroducirRespuestas?cedula=';
+const URL_RAVEN = BASE + 'PRUEBA';
+const URL_OTRA = BASE + 'OTRA';
 const URL_RAVEN_MINUSCULAS = 'https://app.psicoweb.com/raven/introducirrespuestas?cedula=PRUEBA';
 
 const ok = (m) => console.log('✓ ' + m);
 
+// Fecha local 'AAAA-MM-DD' a `dias` de hoy.
+const fechaEn = (dias) => {
+  const d = new Date();
+  d.setDate(d.getDate() + dias);
+  return [d.getFullYear(), d.getMonth() + 1, d.getDate()].map((n) => String(n).padStart(2, '0')).join('-');
+};
+
 (async () => {
   const { chromium } = cargarPlaywright();
-  const perfil = fs.mkdtempSync(path.join(os.tmpdir(), 'raven-prueba-'));
+  const temporal = fs.mkdtempSync(path.join(os.tmpdir(), 'raven-prueba-'));
+  const perfil = path.join(temporal, 'perfil');
+  const extension = path.join(temporal, 'extension');
+  fs.cpSync(RAIZ, extension, { recursive: true, filter: (f) => !/[\\/](\.git|dist|node_modules)$/.test(f) });
+  const { privateKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'P-256' });
+  escribirPublica(publicaJwk(privateKey), path.join(extension, 'licencia.js'));
+  const clave = (vence) => firmarClave(privateKey, 'Clínica de prueba', vence).clave;
+  const CLAVE = clave(fechaEn(365));
+
   const ctx = await chromium.launchPersistentContext(perfil, {
     executablePath: rutaChromium(chromium),
     headless: true,
     viewport: { width: 1300, height: 900 },
-    args: [`--disable-extensions-except=${RAIZ}`, `--load-extension=${RAIZ}`],
+    args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`],
   });
   let opcionesPagina = {};
-  await ctx.route('https://app.psicoweb.com/**', (ruta) =>
-    ruta.fulfill({ contentType: 'text/html; charset=utf-8', body: paginaFalsa(opcionesPagina) }));
+  for (const origen of ['https://app.psicoweb.com/**', 'http://app.psicoweb.com/**']) {
+    await ctx.route(origen, (ruta) =>
+      ruta.fulfill({ contentType: 'text/html; charset=utf-8', body: paginaFalsa(opcionesPagina) }));
+  }
 
   try {
     // --- ID de la extensión y errores de carga
@@ -34,6 +58,7 @@ const ok = (m) => console.log('✓ ' + m);
     const yo = info.find((e) => e.name === 'Raven · llenar respuestas');
     assert.ok(yo, 'la extensión cargó');
     assert.deepEqual(yo.manifestErrors || [], [], 'sin errores de manifest');
+    assert.deepEqual(yo.runtimeErrors || [], [], 'sin errores del service worker');
     const ID = yo.id;
     // Los íconos del manifest existen y cargan
     const manifest = JSON.parse(fs.readFileSync(path.join(RAIZ, 'manifest.json'), 'utf8'));
@@ -46,7 +71,20 @@ const ok = (m) => console.log('✓ ' + m);
       assert.deepEqual(medida, [+t, +t], `ícono ${t}`);
     }
     await ext.close();
-    ok(`extensión cargada (${yo.version}, sin errores de manifest, íconos ${Object.keys(manifest.icons).join('/')})`);
+    // Al instalar se abre la bienvenida con la activación
+    let bienvenida = ctx.pages().find((p) => p.url().endsWith('/bienvenida.html'));
+    for (let i = 0; !bienvenida && i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      bienvenida = ctx.pages().find((p) => p.url().endsWith('/bienvenida.html'));
+    }
+    assert.ok(bienvenida, 'se abrió la bienvenida al instalar');
+    await bienvenida.waitForLoadState();
+    await bienvenida.fill('#clave', 'RAVEN1.mala.clave');
+    await bienvenida.click('#guardarClave');
+    await bienvenida.waitForFunction(() => /no es válida/.test(document.getElementById('licenciaTexto').textContent));
+    assert.match(await bienvenida.textContent('#contacto'), /Soporte:/);
+    await bienvenida.close();
+    ok(`extensión cargada (${yo.version}, sin errores de manifest, íconos ${Object.keys(manifest.icons).join('/')}); abre la bienvenida`);
 
     // --- Botón en la página, sin respuestas
     const raven = await ctx.newPage();
@@ -61,6 +99,20 @@ const ok = (m) => console.log('✓ ' + m);
     assert.equal(await raven.inputValue('input[name=r1]'), '');
     ok('botón en la página (content script), inactivo sin respuestas');
 
+    const botonDice = (texto) => raven.waitForFunction((t) =>
+      document.querySelector('#raven-llenar')?.shadowRoot.textContent.includes(t), texto);
+    // El clic del botón es asíncrono (pregunta la licencia): se espera a que diga algo.
+    const botonCumple = (patron) => raven.waitForFunction((fuente) =>
+      new RegExp(fuente).test(document.querySelector('#raven-llenar')?.shadowRoot.querySelector('.texto').textContent),
+    patron.source, { timeout: 5000 }).catch(async () => assert.match(await boton.textContent(), patron));
+    const leer = () => raven.evaluate(() => [...document.querySelectorAll('main input')].map((i) => i.value));
+    const vaciar = () => raven.evaluate(() => document.querySelectorAll('main input').forEach((i) => { i.value = ''; }));
+    const ordenadas = async () => {
+      const v = await raven.evaluate(() =>
+        Object.fromEntries([...document.querySelectorAll('main input')].map((i) => [i.name, i.value])));
+      return Array.from({ length: 60 }, (_, i) => v['r' + (i + 1)]);
+    };
+
     // --- Popup real. Abierto en pestaña, su «pestaña activa» sería él mismo; se le
     // indica que la activa es la del Raven. Todo lo demás es la API real de Chrome.
     const abrirPopup = async (url = 'https://app.psicoweb.com/*') => {
@@ -74,14 +126,48 @@ const ok = (m) => console.log('✓ ' + m);
       }, url);
       await p.goto(`chrome-extension://${ID}/popup.html`);
       await p.waitForFunction(() => document.getElementById('pagina').textContent !== '');
+      await p.waitForFunction(() => document.documentElement.dataset.listo === 'si');
       return { p, errores };
     };
+    // Espera a que un texto del popup cumpla el patrón (los clics ahí son asíncronos)
+    const esperarTexto = (p, selector, patron) => p.waitForFunction(([sel, fuente]) =>
+      new RegExp(fuente).test(document.querySelector(sel).textContent), [selector, patron.source], { timeout: 5000 })
+      .catch(async () => assert.match(await p.textContent(selector), patron));
+    // Almacén de la extensión (desde una página suya fuera de PsicoWeb: no toca nada)
+    const almacen = async (cambiar) => {
+      const p = await ctx.newPage();
+      await p.goto(`chrome-extension://${ID}/popup.html`);
+      if (cambiar) await p.evaluate(cambiar);
+      const datos = await p.evaluate(() => chrome.storage.local.get(null));
+      await p.close();
+      return datos;
+    };
 
+    // --- Licencia: sin clave no llena; una clave mala o vencida no se acepta
     let { p: popup, errores } = await abrirPopup();
     assert.equal(await popup.textContent('#pagina'), 'Página de captura del Raven detectada.');
-    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r1');
+    assert.ok(await popup.isVisible('#licencia'), 'pide la licencia');
+    assert.match(await popup.textContent('#licenciaTexto'), /Activa la extensión/);
+    assert.ok(await popup.isDisabled('#llenar'), 'sin licencia no se llena');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'clave');
+    await popup.fill('#clave', 'RAVEN1.esto.noesunaclave');
+    await popup.click('#guardarClave');
+    await esperarTexto(popup, '#licenciaTexto', /no es válida/);
+    await popup.fill('#clave', clave(fechaEn(-30)));
+    await popup.click('#guardarClave');
+    await esperarTexto(popup, '#licenciaTexto', /venció/);
+    assert.equal((await almacen()).licencia, null, 'no se guardó la clave vencida');
+    // Pegada en dos renglones, como llega a veces por correo
+    await popup.fill('#clave', CLAVE.slice(0, 50) + '\n' + CLAVE.slice(50));
+    await popup.click('#guardarClave');
+    await popup.waitForFunction(() => document.getElementById('licencia').hidden);
+    assert.match(await popup.textContent('#estado'), /Licencia activada: Clínica de prueba/);
+    assert.match(await popup.textContent('#licenciaPie'), /Clínica de prueba · vence el/);
+    assert.ok(!(await popup.isDisabled('#llenar')));
+    ok('licencia: pide clave, rechaza mala y vencida, activa la buena');
 
     // Captura tecleando: salta sola, Backspace regresa, letras no entran
+    await popup.click('#r1');
     const respuestas = Array.from({ length: 60 }, (_, i) => String((i % 8) + 1));
     await popup.keyboard.type(respuestas.slice(0, 30).join(''));
     assert.equal(await popup.evaluate(() => document.activeElement.id), 'r31');
@@ -91,27 +177,23 @@ const ok = (m) => console.log('✓ ' + m);
     await popup.keyboard.type(respuestas.slice(30).join(''));
     assert.equal(await popup.evaluate(() => document.activeElement.id), 'llenar', 'tras la 60 pasa al botón');
     assert.equal(await popup.textContent('#contador'), '60 / 60');
-    const guardadas = await popup.evaluate(() => chrome.storage.local.get('respuestas'));
-    assert.deepEqual(guardadas.respuestas, respuestas, 'chrome.storage tiene lo tecleado');
+    const guardadas = await popup.evaluate(() => chrome.storage.local.get('capturas'));
+    assert.deepEqual(guardadas.capturas[0].respuestas, respuestas, 'chrome.storage tiene lo tecleado');
+    assert.equal(guardadas.capturas[0].huella, huellaCedula('PRUEBA'), 'ligada a la cédula donde se tecleó');
     ok('popup: captura con teclado y guardado en chrome.storage');
 
     // El botón de la página se actualizó solo
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('60/60'));
-    ok('botón de la página se actualiza en vivo (60/60)');
+    await botonDice('60/60');
+    await botonCumple(/Candidato 1 \(…UEBA\)/);
+    ok('botón de la página se actualiza en vivo y dice de quién son');
 
     // Llenar desde el popup (Enter sobre «Llenar página»)
     await popup.keyboard.press('Enter');
-    await popup.waitForFunction(() => document.getElementById('estado').textContent !== '');
+    await popup.waitForFunction(() => document.getElementById('estado').textContent.startsWith('Listo'));
     assert.match(await popup.textContent('#estado'), /Listo: 60 casillas/);
-    const leer = () => raven.evaluate(() => [...document.querySelectorAll('main input')].map((i) => i.value));
-    const ordenadas = async () => {
-      const v = await raven.evaluate(() =>
-        Object.fromEntries([...document.querySelectorAll('main input')].map((i) => [i.name, i.value])));
-      return Array.from({ length: 60 }, (_, i) => v['r' + (i + 1)]);
-    };
     assert.deepEqual(await ordenadas(), respuestas);
-    ok('popup → «Llenar página» llena las 60 en su lugar');
+    assert.match(await popup.evaluate(() => document.getElementById('capturas').selectedOptions[0].textContent), /✓ llenada/);
+    ok('popup → «Llenar página» llena las 60 en su lugar y la marca como llenada');
 
     // Pegar desde Excel: «10» no se recorta a «0»
     await popup.click('#r1');
@@ -125,21 +207,22 @@ const ok = (m) => console.log('✓ ' + m);
     // Se restauran las respuestas
     await popup.evaluate((v) => {
       v.forEach((x, i) => { document.getElementById('r' + (i + 1)).value = x; });
-      return chrome.storage.local.set({ respuestas: v });
+      document.getElementById('r60').dispatchEvent(new Event('input'));
     }, respuestas);
     ok('pegar: valores de más de un dígito se avisan, no se recortan');
     assert.deepEqual(errores, [], 'popup sin errores: ' + errores.join(' | '));
     await popup.close();
 
     // --- Botón de la página llena con un clic
-    await raven.evaluate(() => document.querySelectorAll('main input').forEach((i) => { i.value = ''; }));
+    await vaciar();
+    await botonDice('Llenar · Candidato 1');
     await boton.click();
-    assert.match(await boton.textContent(), /✓ 60 llenadas/);
+    await botonCumple(/✓ 60 llenadas/);
     assert.deepEqual(await ordenadas(), respuestas);
     ok('botón de la página → llena las 60');
 
     // --- Arrastrar el botón: no llena, y recuerda la posición
-    await raven.evaluate(() => document.querySelectorAll('main input').forEach((i) => { i.value = ''; }));
+    await vaciar();
     await raven.waitForTimeout(2600); // que termine el mensaje
     const caja = await boton.boundingBox();
     await raven.mouse.move(caja.x + 20, caja.y + caja.height / 2);
@@ -154,8 +237,7 @@ const ok = (m) => console.log('✓ ' + m);
     await raven.waitForTimeout(200);
     await raven.reload();
     await boton.waitFor();
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('60/60'));
+    await botonDice('60/60');
     const recargada = await boton.boundingBox();
     assert.ok(Math.abs(recargada.x + recargada.width - (movida.x + movida.width)) < 3 &&
       Math.abs(recargada.y - movida.y) < 3, 'posición recordada');
@@ -184,19 +266,23 @@ const ok = (m) => console.log('✓ ' + m);
     assert.equal(estado.state, 'ENABLED', 'sigue activa tras ↻: ' + JSON.stringify(estado.disableReasons));
     await extensiones.close();
     // Cambio de respuestas después de recargar: el botón viejo NO debe usar las de memoria
-    const ext2 = await ctx.newPage();
+    const nuevas = respuestas.map((v) => String(9 - +v));
     for (let intento = 0; ; intento++) {
-      try { await ext2.goto(`chrome-extension://${ID}/popup.html`); break; } catch (e) {
+      try {
+        await almacen(async () => {
+          const { capturas } = await chrome.storage.local.get('capturas');
+          capturas[0].respuestas = capturas[0].respuestas.map((v) => String(9 - +v));
+          await chrome.storage.local.set({ capturas });
+        });
+        break;
+      } catch (e) {
         if (intento > 20) throw e;
-        await ext2.waitForTimeout(250); // la extensión todavía se está recargando
+        await raven.waitForTimeout(250); // la extensión todavía se está recargando
       }
     }
-    const nuevas = respuestas.map((v) => String(9 - +v));
-    await ext2.evaluate((v) => chrome.storage.local.set({ respuestas: v }), nuevas);
-    await ext2.close();
-    await raven.evaluate(() => document.querySelectorAll('main input').forEach((i) => { i.value = ''; }));
+    await vaciar();
     await boton.click();
-    assert.match(await boton.textContent(), /recarga la página/);
+    await botonCumple(/recarga la página/);
     assert.ok((await leer()).every((v) => v === ''), 'el huérfano no llena con datos viejos');
     ok('tras ↻ el botón viejo avisa «recarga la página» y no llena con datos viejos');
 
@@ -204,10 +290,9 @@ const ok = (m) => console.log('✓ ' + m);
     ({ p: popup, errores } = await abrirPopup());
     await popup.waitForTimeout(300);
     assert.equal(await raven.locator('#raven-llenar').count(), 1, 'un solo botón');
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('60/60'));
+    await botonDice('60/60');
     await boton.click();
-    assert.match(await boton.textContent(), /✓ 60 llenadas/);
+    await botonCumple(/✓ 60 llenadas/);
     assert.deepEqual(await ordenadas(), nuevas, 'llena con las respuestas nuevas');
     // Abrir otra vez no duplica ni reemplaza el vivo
     await popup.close();
@@ -230,38 +315,77 @@ const ok = (m) => console.log('✓ ' + m);
     opcionesPagina = { rechaza: [12] };
     await raven.goto(URL_RAVEN);
     await boton.waitFor();
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('60/60'));
+    await botonDice('60/60');
     await boton.click();
-    assert.match(await boton.textContent(), /no aceptó la 12/);
+    await botonCumple(/no aceptó la 12/);
     opcionesPagina = {};
     ok('si la página rechaza un valor, el botón lo dice');
 
-    // --- Aviso por cédula: no llenar a un candidato con las respuestas de otro
-    const { huellaCedula } = require(path.join(RAIZ, 'cedula.js'));
-    const URL_OTRA = 'https://app.psicoweb.com/Raven/IntroducirRespuestas?cedula=OTRA';
-    const leerAlmacen = async () => {
-      const p = await ctx.newPage();
-      await p.goto(`chrome-extension://${ID}/popup.html`); // fuera de PsicoWeb: no escribe nada
-      const datos = await p.evaluate(() => chrome.storage.local.get(null));
-      await p.close();
-      return datos;
+    // --- Atajo de teclado: el service worker le pide al botón que llene. Se llama su
+    // manejador directamente (Playwright no puede apretar atajos del navegador).
+    const trabajador = async () => {
+      let sw = ctx.serviceWorkers().filter((w) => w.url().includes(ID)).pop();
+      if (!sw) {
+        const despierta = ctx.waitForEvent('serviceworker');
+        await almacen(() => chrome.runtime.sendMessage({ tipo: 'licencia' }));
+        sw = await despierta;
+      }
+      return sw;
     };
-    let almacen = await leerAlmacen();
-    assert.equal(almacen.dueno, huellaCedula('PRUEBA'), 'la captura quedó ligada a la cédula donde se tecleó');
-    assert.ok(!JSON.stringify(almacen).includes('PRUEBA'), 'no se guarda la cédula, solo su huella');
+    const atajo = async () => (await trabajador()).evaluate(async () => {
+      const [t] = await chrome.tabs.query({ url: 'https://app.psicoweb.com/*' });
+      return llenarConAtajo(t);
+    });
+    await raven.goto(URL_RAVEN_MINUSCULAS); // Chrome no le pone el botón
+    await raven.waitForTimeout(300);
+    assert.equal(await raven.locator('#raven-llenar').count(), 0);
+    await atajo();
+    await raven.locator('#raven-llenar button').waitFor();
+    await botonCumple(/✓ 60 llenadas/);
+    assert.deepEqual(await ordenadas(), nuevas, 'el atajo pone el botón y llena');
+    await vaciar();
+    await atajo();
+    await raven.waitForFunction(() => document.querySelector('input[name=r60]').value !== '');
+    assert.deepEqual(await ordenadas(), nuevas, 'con el botón ya puesto también llena');
+    assert.equal(await raven.locator('#raven-llenar').count(), 1, 'no duplica el botón');
+    ({ p: popup } = await abrirPopup());
+    const comandos = await popup.evaluate(() => chrome.commands.getAll());
+    assert.ok(comandos.some((k) => k.name === 'llenar'), 'el manifest declara el atajo');
+    const atajoLlenar = comandos.find((k) => k.name === 'llenar').shortcut;
+    // Chrome deja vacío un atajo que choca con uno suyo (pasó con Alt+Shift+R)
+    for (const k of comandos) assert.ok(k.shortcut, `Chrome asignó el atajo «${k.name}» del manifest`);
+    if (atajoLlenar) assert.match(await popup.textContent('#atajo'), new RegExp(atajoLlenar.replace(/\+/g, '\\+')));
+    await popup.close();
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+    // Con el popup abierto, lo que guarda la página (✓ llenada) no se pierde al seguir usándolo
+    ({ p: popup, errores } = await abrirPopup());
+    await popup.click('#r60');
+    await popup.keyboard.type(nuevas[59]); // cambiar una casilla quita la marca de llenada
+    assert.ok(!(await almacen()).capturas[0].llenada);
+    await vaciar();
+    await atajo();
+    await popup.waitForFunction(() => /✓ llenada/.test(document.getElementById('capturas').selectedOptions[0].textContent));
+    await popup.fill('#nombre', 'Otro nombre');
+    await popup.fill('#nombre', 'Candidato 1');
+    assert.ok((await almacen()).capturas[0].llenada, 'el popup no pisó la marca de llenada');
+    assert.deepEqual(errores, []);
+    await popup.close();
+    ok(`atajo de teclado (${atajoLlenar || 'sin asignar'}): llena igual que el botón, aunque la pestaña no lo tenga`);
+
+    // --- Aviso por cédula: no llenar a un candidato con las respuestas de otro
+    assert.ok(!JSON.stringify(await almacen()).includes('PRUEBA'), 'no se guarda la cédula, solo su huella');
 
     // Botón de la página en otra cédula: primer clic avisa y no llena; segundo llena
     await raven.goto(URL_OTRA);
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar')?.shadowRoot.textContent.includes('60/60'));
+    await botonDice('60/60');
     await boton.click();
-    assert.match(await boton.textContent(), /otra cédula/);
+    await botonCumple(/otra cédula/);
     assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
     await boton.click();
-    assert.match(await boton.textContent(), /✓ 60 llenadas/);
+    await botonCumple(/✓ 60 llenadas/);
     assert.deepEqual(await ordenadas(), nuevas);
-    assert.equal((await leerAlmacen()).dueno, huellaCedula('OTRA'), 'al llenar pasan a ser de esta cédula');
+    assert.equal((await almacen()).capturas[0].huella, huellaCedula('OTRA'), 'al llenar pasan a ser de esta cédula');
     ok('botón: en otra cédula avisa y pide un segundo clic');
 
     // Popup en la cédula correcta: sin aviso
@@ -275,7 +399,7 @@ const ok = (m) => console.log('✓ ' + m);
     ({ p: popup, errores } = await abrirPopup());
     assert.ok(await popup.isVisible('#otra'), 'aviso de otra cédula');
     await popup.click('#llenar');
-    assert.match(await popup.textContent('#estado'), /otra cédula/);
+    await esperarTexto(popup, '#estado', /otra cédula/);
     assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
     await popup.click('#llenar');
     await popup.waitForFunction(() => /Listo/.test(document.getElementById('estado').textContent));
@@ -285,55 +409,245 @@ const ok = (m) => console.log('✓ ' + m);
     await popup.close();
     ok('popup: aviso de otra cédula y confirmación al llenar');
 
-    // «Empezar captura nueva» limpia todo; la captura nueva queda ligada a la cédula abierta
+    // «Nueva captura para esta cédula»: la anterior se queda; la nueva es del candidato abierto
     await raven.goto(URL_OTRA);
     await boton.waitFor();
     ({ p: popup } = await abrirPopup());
     assert.ok(await popup.isVisible('#otra'));
-    await popup.click('#nueva');
+    await popup.click('#nuevaAqui');
     assert.equal(await popup.textContent('#contador'), '0 / 60');
     assert.ok(await popup.isHidden('#otra'));
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('Captura las respuestas'));
+    await botonDice('Captura las respuestas');
     await popup.keyboard.type('7');
     await popup.waitForTimeout(150);
-    almacen = await leerAlmacen();
-    assert.equal(almacen.dueno, huellaCedula('OTRA'));
-    assert.equal(almacen.respuestas[0], '7');
+    let datos = await almacen();
+    assert.equal(datos.capturas.length, 2, 'la captura anterior se conserva');
+    assert.equal(datos.capturas[1].huella, huellaCedula('OTRA'));
+    assert.equal(datos.capturas[1].respuestas[0], '7');
     await popup.close();
-    ok('«Empezar captura nueva» limpia; la captura nueva es de la cédula abierta');
+    ok('«Nueva captura para esta cédula» conserva la anterior; la nueva es de la cédula abierta');
 
-    // Se deja como estaba para lo que sigue
-    ({ p: popup } = await abrirPopup());
-    await popup.evaluate(([v, d]) => chrome.storage.local.set({ respuestas: v, dueno: d }), [nuevas, huellaCedula('PRUEBA')]);
-    await popup.close();
-    await raven.goto(URL_RAVEN);
-    await boton.waitFor();
-
-    // --- Fuera de PsicoWeb
+    // --- Cola: aplicación en grupo. Se capturan dos candidatos fuera de PsicoWeb y luego
+    // cada uno se llena solo al abrir su cédula.
+    await almacen(() => chrome.storage.local.remove(['capturas', 'actual']));
     const otra = await ctx.newPage();
     await otra.route('https://example.org/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>otra</p>' }));
     await otra.goto('https://example.org/');
+    ({ p: popup, errores } = await abrirPopup('https://example.org/*'));
+    const deAna = Array.from({ length: 60 }, (_, i) => String((i % 5) + 1));
+    const deBeto = Array.from({ length: 60 }, (_, i) => String((i % 6) + 3));
+    await popup.fill('#nombre', 'Ana');
+    await popup.fill('#cedula', 'aaaa000000aaaaaa01');
+    await popup.press('#cedula', 'Enter');
+    assert.match(await popup.textContent('#estado'), /Ligada a la cédula …AA01/);
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r1', 'Enter en la cédula pasa a la captura');
+    await popup.keyboard.type(deAna.join(''));
+    await popup.click('#nueva');
+    await popup.fill('#nombre', 'Beto');
+    await popup.fill('#cedula', 'AAAA000000AAAAAA01');
+    await popup.press('#cedula', 'Enter');
+    assert.match(await popup.textContent('#estado'), /ya está en «Ana \(…AA01\)»/, 'una cédula no puede estar en dos capturas');
+    await popup.fill('#cedula', 'BBBB000000BBBBBB02');
+    await popup.press('#cedula', 'Enter');
+    await popup.keyboard.type(deBeto.join(''));
+    const opciones = await popup.evaluate(() => [...document.getElementById('capturas').options].map((o) => o.textContent));
+    assert.deepEqual(opciones, ['Ana (…AA01) · 60/60', 'Beto (…BB02) · 60/60']);
+    assert.deepEqual(errores, []);
+    await popup.close();
+    // En la página de Ana con Beto abierto en la extensión: el aviso lleva a Ana
+    await raven.goto(BASE + 'AAAA000000AAAAAA01');
+    await almacen(async () => {
+      const { capturas } = await chrome.storage.local.get('capturas');
+      await chrome.storage.local.set({ actual: capturas[1].id });
+    });
+    ({ p: popup } = await abrirPopup());
+    assert.equal(await popup.inputValue('#nombre'), 'Ana', 'se abre en la captura del candidato de la página');
+    await popup.selectOption('#capturas', { index: 1 });
+    assert.ok(await popup.isVisible('#otra'));
+    assert.equal(await popup.textContent('#nuevaAqui'), 'Ir a Ana (…AA01)');
+    await popup.click('#nuevaAqui');
+    assert.equal(await popup.inputValue('#nombre'), 'Ana');
+    assert.ok(await popup.isHidden('#otra'));
+    await popup.close();
+    datos = await almacen();
+    assert.ok(!JSON.stringify(datos).includes('AAAA000000'), 'tampoco se guarda la cédula escrita a mano');
+
+    await raven.goto(BASE + 'AAAA000000AAAAAA01');
+    await botonDice('Llenar · Ana (…AA01) · 60/60');
+    await boton.click();
+    await botonCumple(/✓ 60 llenadas — revisa y guarda · faltan 1/);
+    assert.deepEqual(await ordenadas(), deAna);
+    await raven.goto(BASE + 'BBBB000000BBBBBB02');
+    await botonDice('Llenar · Beto (…BB02) · 60/60');
+    await boton.click();
+    await botonCumple(/✓ 60 llenadas — revisa y guarda$/);
+    assert.deepEqual(await ordenadas(), deBeto);
+    // Abierto en la página de Ana, el popup muestra a Ana aunque la última abierta fue Beto
+    await raven.goto(BASE + 'AAAA000000AAAAAA01');
+    await botonDice('Llenar otra vez · Ana');
+    ({ p: popup } = await abrirPopup());
+    assert.equal(await popup.inputValue('#nombre'), 'Ana');
+    assert.match(await popup.textContent('#estado'), /Respuestas de «Ana \(…AA01\)» para esta cédula/);
+    // Quitar las ya llenadas (con confirmación)
+    await popup.click('#quitarLlenadas');
+    assert.equal(await popup.evaluate(() => document.getElementById('capturas').options.length), 2);
+    await popup.click('#quitarLlenadas');
+    assert.equal(await popup.evaluate(() => document.getElementById('capturas').options.length), 1);
+    assert.equal(await popup.textContent('#contador'), '0 / 60');
+    await popup.close();
+    await botonDice('Captura las respuestas');
+    ok('cola: dos candidatos capturados de antemano, cada uno se llena solo en su cédula');
+    await otra.close();
+
+    // --- Doble captura: se teclea otra vez sin ver la primera; las diferencias se marcan
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+    ({ p: popup, errores } = await abrirPopup());
+    const primera = Array.from({ length: 60 }, (_, i) => String((i % 7) + 1));
+    await popup.click('#r1');
+    await popup.keyboard.type(primera.join(''));
+    await popup.click('#verificar');
+    assert.equal(await popup.textContent('#contador'), '2ª: 0 / 60');
+    assert.ok(await popup.isVisible('#modoVerificar'));
+    assert.ok(await popup.isDisabled('#llenar'), 'no se llena a media verificación');
+    assert.equal(await popup.inputValue('#r1'), '', 'no muestra la primera captura');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r1');
+    const segunda = [...primera];
+    segunda[6] = '9';
+    segunda[21] = '9';
+    await popup.keyboard.type(segunda.slice(0, 10).join(''));
+    assert.ok(await popup.evaluate(() => document.getElementById('r7').classList.contains('difiere')), 'se marca al momento');
+    assert.equal(await popup.getAttribute('#r7', 'title'), '', 'sin revelar la primera');
+    await popup.keyboard.type(segunda.slice(10).join(''));
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'verificar', 'tras la 60 pasa a «Terminar»');
+    await popup.keyboard.press('Enter');
+    assert.match(await popup.textContent('#estado'), /Diferencias en 2: 7, 22/);
+    assert.equal(await popup.inputValue('#r7'), primera[6], 'vuelve a mostrar la primera');
+    assert.match(await popup.getAttribute('#r7', 'title'), new RegExp(`1ª captura: ${primera[6]} · 2ª: 9`));
+    assert.equal(await popup.evaluate(() => document.getElementById('r7').parentElement.dataset.segunda), '9', 'la 2ª se ve junto a la casilla');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r7', 'lleva a la primera diferencia');
+    assert.match(await popup.evaluate(() => document.getElementById('capturas').selectedOptions[0].textContent), /2 diferencias/);
+    await popup.close();
+    // El botón de la página pide confirmación mientras haya diferencias
+    await vaciar();
+    await botonDice('60/60');
+    await boton.click();
+    await botonCumple(/2 diferencias sin resolver/);
+    assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
+    await boton.click();
+    await botonCumple(/✓ 60 llenadas/);
+    assert.deepEqual(await ordenadas(), primera, 'llena con la primera captura');
+    // Se resuelven con la hoja: lo que se escribe en la casilla roja queda en las dos
+    ({ p: popup, errores } = await abrirPopup());
+    await popup.click('#r7');
+    await popup.keyboard.type('9');
+    await popup.click('#r22');
+    await popup.keyboard.type('9');
+    assert.equal(await popup.evaluate(() => document.querySelectorAll('.difiere').length), 0);
+    assert.match(await popup.evaluate(() => document.getElementById('capturas').selectedOptions[0].textContent), /verificada/);
+    await popup.click('#llenar');
+    await esperarTexto(popup, '#estado', /Listo: 60/);
+    assert.deepEqual(await ordenadas(), segunda);
+    // «Empezar de nuevo» borra solo la segunda
+    await popup.click('#verificar');
+    await popup.click('#reiniciarVerificacion');
+    assert.equal(await popup.textContent('#contador'), '2ª: 0 / 60');
+    await popup.click('#verificar');
+    assert.equal(await popup.inputValue('#r7'), '9', 'la primera captura sigue igual');
+    assert.deepEqual(errores, []);
+    await popup.close();
+    ok('doble captura: marca diferencias sin revelar la 1ª, pide confirmación y se resuelve con la hoja');
+
+    // --- Licencia en el botón de la página: vencida no llena; en gracia sí, con aviso
+    await almacen(async () => {
+      const { capturas } = await chrome.storage.local.get('capturas');
+      capturas[0].verificacion = null;
+      capturas[0].respuestas = Array(60).fill('4');
+      await chrome.storage.local.set({ capturas });
+    });
+    await raven.goto(URL_RAVEN);
+    await botonDice('60/60');
+    await almacen(() => chrome.storage.local.remove('licencia'));
+    await vaciar();
+    await boton.click();
+    await botonCumple(/Activa tu licencia/);
+    const claveVencida = clave(fechaEn(-8));
+    await almacen(new Function(`return chrome.storage.local.set({ licencia: ${JSON.stringify(claveVencida)} })`));
+    await boton.click();
+    await botonCumple(/licencia venció/);
+    assert.ok((await leer()).every((v) => v === ''), 'con la licencia vencida no llena');
+    ({ p: popup } = await abrirPopup());
+    assert.match(await popup.textContent('#licenciaTexto'), /venció.*Ya no se puede llenar/);
+    assert.ok(await popup.isDisabled('#llenar'));
+    await popup.close();
+    const claveGracia = clave(fechaEn(-2));
+    await almacen(new Function(`return chrome.storage.local.set({ licencia: ${JSON.stringify(claveGracia)} })`));
+    await boton.click();
+    await botonCumple(/✓ 60 llenadas.*licencia vencida/);
+    ({ p: popup } = await abrirPopup());
+    assert.match(await popup.textContent('#licenciaTexto'), /Seguirá llenando 5 días más/);
+    await popup.close();
+    ok('licencia en el botón: sin clave o vencida no llena; en gracia llena y avisa');
+
+    // Atrasar el reloj no revive una licencia: cuenta la fecha más reciente ya vista
+    await almacen(new Function(`return chrome.storage.local.set({ licencia: ${JSON.stringify(clave(fechaEn(20)))}, licenciaVista: ${Math.round(Date.now() / 86400000) + 60} })`));
+    ({ p: popup } = await abrirPopup());
+    assert.match(await popup.textContent('#licenciaTexto'), /venció/);
+    await popup.close();
+    await almacen(new Function(`return chrome.storage.local.set({ licencia: ${JSON.stringify(CLAVE)}, licenciaVista: 0 })`));
+    ok('licencia: atrasar el reloj no la revive');
+
+    // --- PsicoWeb por http: aviso y botón para pasar a https
+    await raven.goto(URL_RAVEN.replace('https:', 'http:'));
+    await boton.waitFor();
+    ({ p: popup } = await abrirPopup('http://app.psicoweb.com/*'));
+    assert.match(await popup.textContent('#pagina'), /sin cifrar/);
+    assert.ok(await popup.isVisible('#https'));
+    await popup.click('#https');
+    await raven.waitForURL(URL_RAVEN);
+    if (!popup.isClosed()) await popup.close();
+    await boton.waitFor();
+    ok('http: avisa que la conexión no está cifrada y pasa a https');
+
+    // --- Fuera de PsicoWeb
+    const fuera = await ctx.newPage();
+    await fuera.route('https://example.org/**', (r) => r.fulfill({ contentType: 'text/html', body: '<p>otra</p>' }));
+    await fuera.goto('https://example.org/');
     ({ p: popup } = await abrirPopup('https://example.org/*'));
     assert.ok(await popup.isDisabled('#llenar'));
-    assert.equal(await otra.locator('#raven-llenar').count(), 0);
+    assert.equal(await fuera.locator('#raven-llenar').count(), 0);
     await popup.close();
+    await fuera.close();
     ok('fuera de PsicoWeb: se captura pero no se llena ni se inyecta nada');
 
-    // --- Borrar todo pide dos clics y el botón de la página se apaga
+    // --- Borrar captura pide dos clics y el botón de la página se apaga
     ({ p: popup } = await abrirPopup());
     await popup.click('#borrar');
     assert.equal(await popup.textContent('#contador'), '60 / 60');
     await popup.click('#borrar');
     assert.equal(await popup.textContent('#contador'), '0 / 60');
-    await raven.waitForFunction(() =>
-      document.querySelector('#raven-llenar').shadowRoot.textContent.includes('Captura las respuestas'));
-    ok('«Borrar todo» con confirmación; el botón de la página se apaga');
+    await botonDice('Captura las respuestas');
+    ok('«Borrar captura» con confirmación; el botón de la página se apaga');
+
+    // --- Lo guardado por la versión 0.5 ({ respuestas, dueno }) pasa a la cola
+    await popup.close();
+    await almacen(new Function(`return chrome.storage.local.remove(['capturas', 'actual']).then(() =>
+      chrome.storage.local.set({ respuestas: ${JSON.stringify(respuestas)}, dueno: ${JSON.stringify(huellaCedula('PRUEBA'))} }))`));
+    await raven.reload();
+    await botonDice('Llenar · Candidato 1 · 60/60'); // el botón lo lee aunque no se haya convertido
+    ({ p: popup } = await abrirPopup());
+    assert.equal(await popup.textContent('#contador'), '60 / 60');
+    datos = await almacen();
+    assert.equal(datos.respuestas, undefined, 'se quitó el formato viejo');
+    assert.deepEqual(datos.capturas[0].respuestas, respuestas);
+    assert.equal(datos.capturas[0].huella, huellaCedula('PRUEBA'));
+    await popup.close();
+    ok('actualizar desde 0.5: la captura guardada pasa a la cola');
 
     assert.deepEqual(erroresRaven, [], 'página sin errores: ' + erroresRaven.join(' | '));
     console.log('Extensión: todo bien.');
   } finally {
     await ctx.close();
-    fs.rmSync(perfil, { recursive: true, force: true });
+    fs.rmSync(temporal, { recursive: true, force: true });
   }
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -1,6 +1,7 @@
-// Botón flotante en la captura del Raven: llena con un clic usando las respuestas
-// guardadas en la extensión. llenar(), cedulaDe() y huellaCedula() vienen de llenar.js y
-// cedula.js (mismo content script).
+// Botón flotante en la captura del Raven: llena con un clic usando la captura del
+// candidato abierto (por su cédula) o la que esté abierta en la extensión. llenar(),
+// cedulaDe(), huellaCedula(), segundoClic() y las funciones de la cola vienen de llenar.js,
+// cedula.js y capturas.js (mismo content script). La licencia la comprueba background.js.
 // Va dentro de Shadow DOM para que ni la página ni el botón se afecten los estilos.
 // Se puede arrastrar (por si tapa algo de la página) y recuerda dónde quedó.
 (() => {
@@ -62,18 +63,25 @@
   const boton = raiz.querySelector('button');
   const texto = raiz.querySelector('.texto');
 
-  let respuestas = [];
+  let capturas = [];
+  let actualId = null;
   let mensajeHasta = 0;
   let temporizador = null;
 
-  const llenas = () => respuestas.filter(Boolean).length;
+  // Cédula de esta página (cedula.js): decide qué captura de la cola se usa.
+  const cedula = cedulaDe(location.href);
+  const huella = cedula ? huellaCedula(cedula) : null;
+  const elegida = () => elegirCaptura(capturas, actualId, huella);
 
   function pintar() {
     if (Date.now() < mensajeHasta) return;
-    const n = llenas();
+    const { captura, motivo } = elegida();
+    const n = llenasDe(captura);
     boton.className = n ? '' : 'inactivo';
     boton.setAttribute('aria-disabled', String(!n));
-    texto.textContent = n ? `Llenar respuestas · ${n}/${TOTAL}` : 'Captura las respuestas en la extensión';
+    if (!n) texto.textContent = 'Captura las respuestas en la extensión';
+    else if (motivo !== 'cedula') texto.textContent = `Llenar respuestas · ${n}/${TOTAL}`;
+    else texto.textContent = `${captura.llenada ? 'Llenar otra vez' : 'Llenar'} · ${nombreCorto(captura)} · ${n}/${TOTAL}`;
   }
 
   function mostrar(mensaje, tipo, duracion = 2500) {
@@ -84,15 +92,18 @@
     temporizador = setTimeout(() => { mensajeHasta = 0; pintar(); }, duracion);
   }
 
-  // De qué candidato son las respuestas: huella de la cédula (cedula.js).
-  let dueno = null;
-  let confirmarOtraHasta = 0;
+  const confirmarOtra = segundoClic(4000);
+  const confirmarDiferencias = segundoClic(4000);
+
+  function tomar(guardado) {
+    // Lo de versiones anteriores ({ respuestas, dueno }) se lee igual; el popup lo convierte.
+    const datos = migrarCapturas(guardado) || guardado;
+    capturas = Array.isArray(datos.capturas) ? datos.capturas : [];
+    actualId = datos.actual ?? null;
+  }
 
   async function leer() {
-    const guardado = await chrome.storage.local.get(['respuestas', 'dueno']);
-    respuestas = Array.isArray(guardado.respuestas) ? guardado.respuestas : [];
-    dueno = typeof guardado.dueno === 'string' ? guardado.dueno : null;
-    return respuestas;
+    tomar(await chrome.storage.local.get(['capturas', 'actual', 'respuestas', 'dueno']));
   }
 
   async function llenarAhora() {
@@ -101,23 +112,34 @@
     if (!vivo()) return mostrar('La extensión se actualizó: recarga la página (F5).', 'mal');
     try {
       await leer();
-      if (!llenas()) return pintar();
-      const cedula = cedulaDe(location.href);
-      const huella = cedula ? huellaCedula(cedula) : null;
-      if (huella && dueno && dueno !== huella && Date.now() > confirmarOtraHasta) {
-        confirmarOtraHasta = Date.now() + 4000;
+      const { captura, motivo } = elegida();
+      if (!llenasDe(captura)) return pintar();
+      const licencia = await chrome.runtime.sendMessage({ tipo: 'licencia' });
+      if (!licencia?.puedeLlenar) {
+        const motivo = {
+          vencida: 'Tu licencia venció · renuévala para seguir llenando',
+          invalida: 'La clave de licencia no es válida · abre la extensión',
+        }[licencia?.estado] || 'Activa tu licencia: abre la extensión';
+        return mostrar(motivo, 'mal', 4000);
+      }
+      if (motivo === 'otra' && confirmarOtra()) {
         return mostrar('Son de otra cédula · clic otra vez para llenar igual', 'aviso', 4000);
       }
-      confirmarOtraHasta = 0;
-      const r = llenar(respuestas);
-      if (!r.error && huella) {
-        // Se llenaron en esta cédula: desde ahora son de este candidato.
-        dueno = huella;
-        chrome.storage.local.set({ dueno }).catch(() => {});
+      confirmarOtra.cancelar();
+      const dif = diferencias(captura);
+      if (dif.length && confirmarDiferencias()) {
+        return mostrar(`${dif.length} ${dif.length === 1 ? 'diferencia' : 'diferencias'} sin resolver en la doble captura · clic otra vez para llenar igual`, 'aviso', 4000);
       }
-      if (r.error) mostrar(r.error, 'mal');
-      else if (r.enBlanco.length) mostrar(`${r.llenadas} llenadas · ${r.enBlanco.length} en blanco`, 'aviso');
-      else mostrar(`✓ ${r.llenadas} llenadas — revisa y guarda`, 'ok');
+      confirmarDiferencias.cancelar();
+      const r = llenar(captura.respuestas);
+      if (r.error) return mostrar(r.error, 'mal');
+      // Se llenaron en esta cédula: la captura queda ligada a ella y marcada como hecha.
+      capturas = marcarLlenada(capturas, captura.id, huella, pistaDe(cedula));
+      chrome.storage.local.set({ capturas }).catch(() => {});
+      const pendientes = capturas.filter((c) => !c.llenada && llenasDe(c)).length;
+      const extra = (pendientes ? ` · faltan ${pendientes}` : '') + (licencia.estado === 'gracia' ? ' · licencia vencida' : '');
+      if (r.enBlanco.length) mostrar(`${r.llenadas} llenadas · ${r.enBlanco.length} en blanco${extra}`, 'aviso');
+      else mostrar(`✓ ${r.llenadas} llenadas — revisa y guarda${extra}`, 'ok', pendientes ? 3500 : 2500);
     } catch (e) {
       mostrar('Error al llenar: ' + e.message, 'mal');
     }
@@ -169,23 +191,33 @@
     llenarAhora();
   });
 
+  // Atajo de teclado (background.js): hace lo mismo que el clic.
+  try {
+    chrome.runtime.onMessage.addListener((mensaje, _remitente, responder) => {
+      if (mensaje?.tipo !== 'llenar' || !host.isConnected) return false;
+      llenarAhora().then(() => responder(true));
+      return true;
+    });
+  } catch { /* sin acceso a runtime */ }
+
   // --- Arranque ----------------------------------------------------------------
   try {
     chrome.storage.onChanged.addListener((cambios, area) => {
-      if (area !== 'local' || !host.isConnected || !('respuestas' in cambios)) return;
-      const nuevas = cambios.respuestas.newValue;
-      respuestas = Array.isArray(nuevas) ? nuevas : [];
+      if (area !== 'local' || !host.isConnected) return;
+      if (!('capturas' in cambios) && !('actual' in cambios)) return;
+      if ('capturas' in cambios) capturas = Array.isArray(cambios.capturas.newValue) ? cambios.capturas.newValue : [];
+      if ('actual' in cambios) actualId = cambios.actual.newValue ?? null;
       pintar();
     });
   } catch { /* sin acceso a storage */ }
 
   (document.body || document.documentElement).append(host);
   pintar();
-  chrome.storage.local.get(['respuestas', 'posicionBoton'])
-    .then(({ respuestas: guardadas, posicionBoton }) => {
-      respuestas = Array.isArray(guardadas) ? guardadas : [];
+  chrome.storage.local.get(['capturas', 'actual', 'respuestas', 'dueno', 'posicionBoton'])
+    .then((guardado) => {
+      tomar(guardado);
       pintar();
-      if (posicionBoton) colocar(posicionBoton.derecha, posicionBoton.abajo);
+      if (guardado.posicionBoton) colocar(guardado.posicionBoton.derecha, guardado.posicionBoton.abajo);
     })
     .catch(() => {});
 })();

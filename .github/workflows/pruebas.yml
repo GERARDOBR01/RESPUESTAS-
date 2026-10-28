@@ -1,0 +1,27 @@
+# Corre las pruebas con Chromium real en cada push y pull request.
+# Playwright se instala fuera del repo: Chrome carga esta carpeta como extensión y no
+# debe tener node_modules.
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pruebas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Instalar Playwright y Chromium
+        run: |
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.63.0
+          npx --prefix "$RUNNER_TEMP/pw" playwright install --with-deps chromium
+          echo "PLAYWRIGHT_DIR=$RUNNER_TEMP/pw/node_modules/playwright" >> "$GITHUB_ENV"
+      - name: Unitarias
+        run: node pruebas/unitarias.js
+      - name: Extensión
+        run: node pruebas/extension.js

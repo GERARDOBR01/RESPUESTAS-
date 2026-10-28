@@ -32,7 +32,8 @@ USAR — UN CANDIDATO
    - Enter / ↓ siguiente · ↑ anterior · → / ← cambia de serie · Backspace regresa.
    - También puedes pegar una columna de Excel en cualquier casilla.
 3. Clic en «Llenar página», o en el botón «Llenar» que aparece abajo a la derecha de la
-   página (se puede arrastrar si estorba).
+   página (se puede arrastrar si estorba), o el atajo de teclado  Alt+Shift+L .
+   (Alt+Shift+R abre la extensión. Se cambian en chrome://extensions/shortcuts)
 4. Revisa las respuestas en la página y guarda en PsicoWeb como siempre.
    La extensión no guarda ni envía nada por ti.
 
@@ -43,6 +44,14 @@ USAR — APLICACIÓN EN GRUPO (varios candidatos)
 2. En PsicoWeb abre la captura de cada candidato: el botón de la página ya dice su nombre.
    Clic en «Llenar», revisa y guarda. Queda marcado «✓ llenada» y te dice cuántos faltan.
 3. Al terminar el grupo: «Quitar llenadas» (abajo en la extensión, pide un segundo clic).
+
+DOBLE CAPTURA (para no tener errores de dedo)
+1. Ya capturadas las 60, clic en «Verificar» y vuelve a teclearlas de la hoja.
+   La rejilla aparece vacía; si una no coincide con la primera se pone roja.
+2. Clic en «Terminar verificación»: te dice cuáles difieren. Cada casilla roja muestra
+   lo que tecleaste la 2ª vez; mira la hoja y escribe el valor correcto.
+3. Cuando ya no hay rojas, la captura dice «verificada». Si llenas con diferencias
+   pendientes, la extensión te pide un segundo clic.
 
 AVISO DE OTRO CANDIDATO
    Si las respuestas abiertas son de otra cédula, la extensión lo avisa y pide un segundo

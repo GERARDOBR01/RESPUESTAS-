@@ -93,6 +93,7 @@
   }
 
   const confirmarOtra = segundoClic(4000);
+  const confirmarDiferencias = segundoClic(4000);
 
   function tomar(guardado) {
     // Lo de versiones anteriores ({ respuestas, dueno }) se lee igual; el popup lo convierte.
@@ -123,6 +124,11 @@
         return mostrar('Son de otra cédula · clic otra vez para llenar igual', 'aviso', 4000);
       }
       confirmarOtra.cancelar();
+      const dif = diferencias(captura);
+      if (dif.length && confirmarDiferencias()) {
+        return mostrar(`${dif.length} ${dif.length === 1 ? 'diferencia' : 'diferencias'} sin resolver en la doble captura · clic otra vez para llenar igual`, 'aviso', 4000);
+      }
+      confirmarDiferencias.cancelar();
       const r = llenar(captura.respuestas);
       if (r.error) return mostrar(r.error, 'mal');
       // Se llenaron en esta cédula: la captura queda ligada a ella y marcada como hecha.
@@ -182,6 +188,15 @@
     if (fueArrastre) { fueArrastre = false; return; }
     llenarAhora();
   });
+
+  // Atajo de teclado (background.js): hace lo mismo que el clic.
+  try {
+    chrome.runtime.onMessage.addListener((mensaje, _remitente, responder) => {
+      if (mensaje?.tipo !== 'llenar' || !host.isConnected) return false;
+      llenarAhora().then(() => responder(true));
+      return true;
+    });
+  } catch { /* sin acceso a runtime */ }
 
   // --- Arranque ----------------------------------------------------------------
   try {

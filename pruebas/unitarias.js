@@ -91,6 +91,28 @@ function pruebasCapturas() {
   assert.equal(C.migrarCapturas({ capturas: [] }), null, 'ya está al día');
   assert.deepEqual(C.migrarCapturas({}).capturas[0].respuestas, Array(60).fill(''), 'instalación nueva');
   console.log('✓ cola de candidatos');
+
+  // Doble captura
+  const v = C.nuevaCaptura([]);
+  assert.equal(C.estadoVerificacion(v), null, 'sin doble captura');
+  v.respuestas = Array(60).fill('3');
+  v.verificacion = Array(60).fill('');
+  assert.equal(C.estadoVerificacion(v), null, 'doble captura sin empezar');
+  v.verificacion[0] = '3';
+  assert.equal(C.estadoVerificacion(v), 'incompleta');
+  assert.equal(C.sinVerificar(v).length, 59);
+  v.verificacion = Array(60).fill('3');
+  v.verificacion[6] = '5';
+  v.verificacion[21] = '1';
+  assert.deepEqual(C.diferencias(v), [7, 22]);
+  assert.equal(C.estadoVerificacion(v), 'diferencias');
+  v.verificacion[6] = '3';
+  v.verificacion[21] = '3';
+  assert.equal(C.estadoVerificacion(v), 'verificada');
+  v.respuestas[59] = '';
+  v.verificacion[59] = '4';
+  assert.deepEqual(C.diferencias(v), [60], 'la 2ª tiene respuesta donde la 1ª quedó vacía');
+  console.log('✓ doble captura: diferencias y estado');
 }
 
 async function pruebasLicencia() {
@@ -161,10 +183,11 @@ function pruebasArchivos() {
   }
   const fondo = fs.readFileSync(path.join(RAIZ, manifest.background.service_worker), 'utf8');
   for (const m of fondo.matchAll(/importScripts\('([^']+)'\)/g)) usados.add(m[1]);
-  const popup = fs.readFileSync(path.join(RAIZ, 'popup.js'), 'utf8');
-  for (const m of popup.matchAll(/files: \[([^\]]+)\]/g)) {
-    const inyectados = [...m[1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
-    assert.deepEqual(inyectados, manifest.content_scripts[0].js, 'el popup inyecta lo mismo que el manifest');
+  // El popup y el atajo inyectan los content scripts del manifest, sin repetir la lista.
+  for (const archivo of ['popup.js', 'background.js']) {
+    const codigo = fs.readFileSync(path.join(RAIZ, archivo), 'utf8');
+    assert.ok(!/files: \[/.test(codigo), `${archivo} no repite la lista de content scripts`);
+    assert.ok(codigo.includes('getManifest().content_scripts[0].js'), `${archivo} usa la del manifest`);
   }
   const empaque = fs.readFileSync(path.join(__dirname, '..', 'herramientas', 'empaquetar.ps1'), 'utf8');
   const lista = /\$archivos = (.+)/.exec(empaque)[1];

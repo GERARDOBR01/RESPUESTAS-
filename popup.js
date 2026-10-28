@@ -19,6 +19,8 @@ let cedulaPestana = null;
 let huellaPestana = null;
 let enPsicoweb = false;
 let licencia = { estado: 'sin-configurar', puedeLlenar: true };
+// Doble captura: la rejilla muestra y guarda la 2ª captura (verificacion) en vez de la 1ª.
+let verificando = false;
 
 function armarRejilla() {
   const rejilla = $('rejilla');
@@ -54,7 +56,7 @@ function armarRejilla() {
 
 function enfocar(i) {
   if (i >= 0 && i < TOTAL) casillas[i].focus();
-  else if (i >= TOTAL) btnLlenar.focus();
+  else if (i >= TOTAL) (verificando ? $('verificar') : btnLlenar).focus();
 }
 
 function teclas(e, i) {
@@ -109,8 +111,20 @@ const ligadaA = (huella, sinContar) => capturas.find((c) => c.huella === huella 
 // sin cédula y la pestaña tiene una que no es de otra captura, queda ligada a ella.
 function cambio() {
   const c = actual();
+  if (verificando) {
+    c.verificacion = valores();
+    pintar();
+    guardar();
+    return;
+  }
   const antes = llenasDe(c);
-  c.respuestas = valores();
+  const nuevas = valores();
+  // Corregir a mano una casilla ya verificada es la decisión final (p. ej. al resolver
+  // una diferencia con la hoja): la 2ª captura toma el mismo valor.
+  if (c.verificacion) {
+    nuevas.forEach((v, i) => { if (v !== c.respuestas[i] && c.verificacion[i]) c.verificacion[i] = v; });
+  }
+  c.respuestas = nuevas;
   c.llenada = null; // cambió: hay que volver a llenar
   if (antes === 0 && llenasDe(c) > 0 && !c.huella && huellaPestana && !ligadaA(huellaPestana, c)) {
     c.huella = huellaPestana;
@@ -124,14 +138,37 @@ function pintar() {
   const c = actual();
   const llenas = llenasDe(c);
   const contador = $('contador');
-  contador.textContent = `${llenas} / ${TOTAL}`;
-  contador.className = 'contador ' + (llenas === TOTAL ? 'ok' : '');
+  const ver = c.verificacion;
+  if (verificando) {
+    const tecleadas = (ver || []).filter(Boolean).length;
+    contador.textContent = `2ª: ${tecleadas} / ${llenas}`;
+    contador.className = 'contador ' + (diferencias(c).length ? 'mal' : tecleadas >= llenas ? 'ok' : '');
+  } else {
+    contador.textContent = `${llenas} / ${TOTAL}`;
+    contador.className = 'contador ' + (llenas === TOTAL ? 'ok' : '');
+  }
+  // Diferencias de la doble captura: en rojo. Al verificar no se muestra la 1ª (sería copiarla).
+  casillas.forEach((input, i) => {
+    const difiere = Boolean(ver && ver[i] && ver[i] !== c.respuestas[i]);
+    input.classList.toggle('difiere', difiere);
+    input.title = difiere && !verificando ? `1ª captura: ${c.respuestas[i] || 'vacía'} · 2ª: ${ver[i]}` : '';
+    // Al resolver se ve la 2ª junto a la casilla, para compararla con la hoja.
+    if (difiere && !verificando) input.parentElement.dataset.segunda = ver[i];
+    else delete input.parentElement.dataset.segunda;
+  });
+  document.body.classList.toggle('verificando', verificando);
+  $('modoVerificar').hidden = !verificando;
+  $('verificar').textContent = verificando ? 'Terminar verificación' : 'Verificar';
+  $('verificar').disabled = !verificando && !llenas;
+  btnBorrar.disabled = verificando;
 
   const lista = $('capturas');
   lista.replaceChildren(...capturas.map((k) => {
     const op = document.createElement('option');
     op.value = k.id;
-    op.textContent = `${nombreCorto(k)} · ${llenasDe(k)}/60${k.llenada ? ' · ✓ llenada' : ''}`;
+    const dif = diferencias(k).length;
+    const verificada = estadoVerificacion(k) === 'verificada' ? ' · verificada' : '';
+    op.textContent = `${nombreCorto(k)} · ${llenasDe(k)}/60${dif ? ` · ${dif} ${dif === 1 ? 'diferencia' : 'diferencias'}` : verificada}${k.llenada ? ' · ✓ llenada' : ''}`;
     return op;
   }));
   lista.value = actualId;
@@ -154,14 +191,16 @@ function pintar() {
   const llenadas = capturas.filter((k) => k.llenada).length;
   $('quitarLlenadas').hidden = !llenadas;
   $('quitarLlenadas').textContent = `Quitar llenadas (${llenadas})`;
-  btnLlenar.disabled = !enPsicoweb || !licencia.puedeLlenar;
+  btnLlenar.disabled = verificando || !enPsicoweb || !licencia.puedeLlenar;
   return llenas;
 }
 
 function mostrarCaptura(id) {
+  if (id !== actualId) verificando = false;
   actualId = id;
   const c = actual();
-  casillas.forEach((input, i) => { input.value = c.respuestas[i] || ''; });
+  const fuente = verificando ? (c.verificacion || []) : c.respuestas;
+  casillas.forEach((input, i) => { input.value = fuente[i] || ''; });
   confirmarOtra.cancelar();
   pintar();
 }
@@ -276,6 +315,47 @@ function quitar(condicion) {
   casillas[0].focus();
 }
 
+// --- Doble captura -----------------------------------------------------------------
+$('verificar').addEventListener('click', () => {
+  const c = actual();
+  if (!verificando) {
+    verificando = true;
+    if (!c.verificacion) c.verificacion = Array(TOTAL).fill('');
+    mostrarCaptura(c.id);
+    estado('');
+    const vacia = c.respuestas.findIndex((r, i) => r && !c.verificacion[i]);
+    return enfocar(vacia === -1 ? 0 : vacia);
+  }
+  verificando = false;
+  mostrarCaptura(c.id);
+  guardar();
+  resumenVerificacion();
+});
+
+$('reiniciarVerificacion').addEventListener('click', () => {
+  const c = actual();
+  c.verificacion = Array(TOTAL).fill('');
+  mostrarCaptura(c.id);
+  guardar();
+  casillas[0].focus();
+});
+
+function resumenVerificacion() {
+  const c = actual();
+  const dif = diferencias(c);
+  const faltan = sinVerificar(c);
+  const lista = (ns) => ns.slice(0, 10).join(', ') + (ns.length > 10 ? '…' : '');
+  if (dif.length) {
+    estado(`${dif.length === 1 ? 'Diferencia en la' : `Diferencias en ${dif.length}:`} ${lista(dif)}. ` +
+      'Revisa la hoja y escribe el valor correcto en cada casilla roja.', 'mal');
+    casillas[dif[0] - 1].focus();
+  } else if (faltan.length) {
+    estado(`Sin diferencias en lo verificado; faltan ${faltan.length} por volver a teclear (${lista(faltan)}).`, 'aviso');
+  } else {
+    estado(`✓ Verificada: las ${llenasDe(c)} coinciden.`, 'ok');
+  }
+}
+
 // --- Pestaña ---------------------------------------------------------------------
 async function revisarPestana() {
   [pestana] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -295,7 +375,7 @@ async function revisarPestana() {
     pagina.className = 'pagina';
     // Si la pestaña ya estaba abierta antes de instalar/recargar la extensión, Chrome no
     // le puso el botón. Se agrega aquí (boton.js no lo duplica si ya existe).
-    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: ['cedula.js', 'llenar.js', 'capturas.js', 'boton.js'] })
+    chrome.scripting.executeScript({ target: { tabId: pestana.id }, files: chrome.runtime.getManifest().content_scripts[0].js })
       .catch(() => {});
   }
   // PsicoWeb también contesta por http: ahí las respuestas viajan sin cifrar.
@@ -333,6 +413,7 @@ async function llenarPestana(respuestas) {
 }
 
 const confirmarOtra = segundoClic(4000);
+const confirmarDiferencias = segundoClic(4000);
 
 btnLlenar.addEventListener('click', async () => {
   const c = actual();
@@ -345,6 +426,12 @@ btnLlenar.addEventListener('click', async () => {
     return estado('Estas respuestas se capturaron para otra cédula. Clic otra vez en «Llenar página» para usarlas aquí.', 'aviso');
   }
   confirmarOtra.cancelar();
+  const dif = diferencias(c);
+  if (dif.length && confirmarDiferencias()) {
+    return estado(`La doble captura tiene ${dif.length} ${dif.length === 1 ? 'diferencia' : 'diferencias'} sin resolver (${dif.slice(0, 8).join(', ')}). ` +
+      'Clic otra vez en «Llenar página» para llenar con la 1ª captura.', 'aviso');
+  }
+  confirmarDiferencias.cancelar();
 
   btnLlenar.disabled = true;
   try {
@@ -453,6 +540,15 @@ $('guardarClave').addEventListener('click', async () => {
   }
   mostrarCaptura(actualId);
   if (propia) estado(`Respuestas de «${nombreCorto(propia)}» para esta cédula.`);
+
+  // El atajo lo puede cambiar el usuario en chrome://extensions/shortcuts
+  chrome.commands.getAll().then((comandos) => {
+    const atajo = comandos.find((k) => k.name === 'llenar')?.shortcut;
+    if (!atajo) return;
+    const tecla = document.createElement('kbd');
+    tecla.textContent = atajo;
+    $('atajo').replaceChildren('Atajo para llenar desde la página: ', tecla, '.');
+  }).catch(() => {});
 
   try { licencia = await licenciaActual(); } catch (e) { licencia = { estado: 'invalida', puedeLlenar: false }; }
   pintarLicencia();

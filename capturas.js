@@ -3,7 +3,9 @@
 // PsicoWeb se usan sus respuestas solas; al llenarla queda marcada como hecha.
 //
 // Se guarda en chrome.storage.local como { capturas: [captura…], actual: id }, con
-// captura = { id, nombre, huella, pista, respuestas[60], creada, llenada }.
+// captura = { id, nombre, huella, pista, respuestas[60], verificacion[60] | null, creada, llenada }.
+// verificacion es la doble captura: las 60 tecleadas otra vez, sin ver la primera, para
+// encontrar errores de dedo.
 // nombre lo escribe el usuario (opcional); pista = últimos 4 caracteres de la cédula, para
 // que se reconozca cuál es; la cédula completa nunca se guarda.
 // Solo declaraciones de función: el popup puede volver a inyectar este archivo en la
@@ -18,6 +20,7 @@ function nuevaCaptura(capturas) {
     huella: null,
     pista: null,
     respuestas: Array(60).fill(''),
+    verificacion: null,
     creada: Date.now(),
     llenada: null,
   };
@@ -71,10 +74,32 @@ function marcarLlenada(capturas, id, huella, pista, ahora = Date.now()) {
   });
 }
 
+// Doble captura: números (1–60) donde la segunda no coincide con la primera, y los que
+// tienen respuesta pero todavía no se volvieron a teclear.
+function diferencias(captura) {
+  const ver = captura?.verificacion;
+  if (!ver) return [];
+  return captura.respuestas.flatMap((r, i) => (ver[i] && ver[i] !== r ? [i + 1] : []));
+}
+function sinVerificar(captura) {
+  const ver = captura?.verificacion;
+  if (!ver) return [];
+  return captura.respuestas.flatMap((r, i) => (r && !ver[i] ? [i + 1] : []));
+}
+// null (sin doble captura) | 'verificada' | 'diferencias' | 'incompleta'
+function estadoVerificacion(captura) {
+  if (!captura?.verificacion || !captura.verificacion.some(Boolean)) return null;
+  if (diferencias(captura).length) return 'diferencias';
+  return sinVerificar(captura).length ? 'incompleta' : 'verificada';
+}
+
 function nombreCorto(captura) {
   return captura.pista ? `${captura.nombre} (…${captura.pista})` : captura.nombre;
 }
 
 if (typeof module !== 'undefined') {
-  module.exports = { nuevaCaptura, pistaDe, llenasDe, migrarCapturas, elegirCaptura, marcarLlenada, nombreCorto };
+  module.exports = {
+    nuevaCaptura, pistaDe, llenasDe, migrarCapturas, elegirCaptura, marcarLlenada, nombreCorto,
+    diferencias, sinVerificar, estadoVerificacion,
+  };
 }

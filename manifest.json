@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Raven · llenar respuestas",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Captura las 60 respuestas del Raven una vez y llénalas en la página de PsicoWeb con un clic. No guarda la página por ti.",
   "icons": {
     "16": "iconos/icono-16.png",
@@ -20,6 +20,16 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+R" },
+      "description": "Abrir la captura de respuestas"
+    },
+    "llenar": {
+      "suggested_key": { "default": "Alt+Shift+L" },
+      "description": "Llenar la página del Raven (igual que el botón «Llenar»)"
+    }
   },
   "action": {
     "default_title": "Raven · respuestas",

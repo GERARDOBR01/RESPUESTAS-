@@ -43,6 +43,9 @@ Para quien captura en PsicoWeb las respuestas del Raven aplicado en papel.
 • Aplicaciones en grupo: captura a todos los candidatos de una vez, cada uno con su
   cédula. Al abrir la captura de cada candidato, sus respuestas se usan solas y queda
   marcado como llenado.
+• Doble captura: vuelve a teclear las 60 y te marca en rojo las que no coinciden, para
+  corregir errores de dedo antes de llenar.
+• Atajo de teclado: Alt+Shift+L llena la página sin tocar el mouse.
 • Te avisa si vas a llenar a un candidato con las respuestas de otro.
 • No guarda la página por ti: tú revisas y guardas en PsicoWeb como siempre.
 

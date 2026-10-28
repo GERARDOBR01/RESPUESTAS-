@@ -16,7 +16,9 @@ Mientras `licencia.js` no tenga llave pública (`LICENCIA_PUBLICA = null`) la ex
    - También puedes pegar una columna de Excel en cualquier casilla y se reparte desde ahí.
    - Acepta cualquier dígito; las letras no entran.
    - Enter en la 60 pasa a **Llenar página**; otro Enter llena.
-3. En la captura del Raven en PsicoWeb aprieta el botón flotante **Llenar** (abajo a la derecha) o **Llenar página** en la extensión. Luego revisa y guarda en la página.
+3. En la captura del Raven en PsicoWeb aprieta el botón flotante **Llenar** (abajo a la derecha), **Llenar página** en la extensión o el atajo **Alt+Shift+L**. Luego revisa y guarda en la página.
+
+**Atajos** (se cambian en `chrome://extensions/shortcuts`): **Alt+Shift+L** llena la página igual que el botón, con las mismas comprobaciones (licencia, otra cédula, diferencias); si la pestaña no tiene el botón se lo pone primero. **Alt+Shift+R** abre la extensión. El popup muestra el atajo que esté asignado.
 
 El botón de la página muestra de quién son las respuestas y cuántas hay, y se actualiza solo. Si tapa algo de la página, arrástralo: recuerda dónde lo dejaste.
 
@@ -31,6 +33,12 @@ Para aplicaciones en grupo (`capturas.js`):
 Si la captura no tiene cédula, toma la de la pestaña al teclear la primera respuesta, o al llenar. Una cédula solo puede estar en una captura. Si la abierta es de otro candidato, el popup lo avisa y ofrece ir a la captura de ese candidato (o crear una), y llenar pide un segundo clic.
 
 **Qué se guarda:** de la cédula, una huella cyrb53 (`cedula.js`) y sus últimos 4 caracteres para reconocerla; nunca la cédula completa. La huella es un seudónimo, no anonimato: quien conozca el nombre del candidato podría probar cédulas hasta dar con ella. Todo se queda en `chrome.storage.local` de esa computadora.
+
+## Doble captura
+Para encontrar errores de dedo antes de llenar: **Verificar** y volver a teclear las 60 de la hoja. La rejilla queda vacía para no copiar la primera. Las casillas que no coinciden se marcan en rojo al momento, sin mostrar qué tenía la primera.
+- Al **Terminar verificación** dice cuáles difieren y lleva a la primera. Cada casilla roja muestra el valor de la 2ª captura; se escribe el correcto según la hoja y queda resuelta.
+- Mientras haya diferencias, llenar (popup, botón o atajo) pide un segundo clic y usa la 1ª captura.
+- La lista marca cada captura como «verificada» o con «N diferencias». **Empezar de nuevo** borra solo la 2ª captura.
 
 ## Licencias
 La extensión pide una clave `RAVEN1.…` firmada con ECDSA P-256 (`licencia.js`). Solo trae la llave pública: comprueba la firma sin internet, pero no puede fabricar claves.
@@ -57,9 +65,9 @@ PsicoWeb también contesta por `http://`. Ahí las respuestas viajarían sin cif
 - `popup.html/css/js`: la ventana de la extensión (cola, captura de las 60, licencia).
 - `boton.js`: botón flotante en la página del Raven (content script).
 - `llenar.js`: ubica las casillas, escribe y comprueba. Lo usan el popup y el botón.
-- `capturas.js`: la cola de candidatos (elegir captura por cédula, marcar llenada, migrar desde 0.5).
+- `capturas.js`: la cola de candidatos (elegir captura por cédula, marcar llenada, doble captura, migrar desde 0.5).
 - `cedula.js`: lee la cédula de la URL, calcula su huella y la confirmación por segundo clic.
-- `licencia.js`: verifica la clave de licencia. `background.js`: la verifica para el botón y abre la bienvenida al instalar.
+- `licencia.js`: verifica la clave de licencia. `background.js`: la verifica para el botón, atiende el atajo de teclado y abre la bienvenida al instalar.
 - `bienvenida.html/css/js`: los tres pasos tras instalar (fijar ícono, activar licencia, usar).
 - `analizar.js`: lee una lista pegada (columna de Excel, comas o espacios).
 - `herramientas/licencia.js`: emite las claves. `herramientas/empaquetar.ps1`: arma el .zip.
@@ -76,7 +84,7 @@ Usan Chromium con la extensión cargada de verdad y una página falsa en la URL 
 
 ```
 node pruebas/unitarias.js   # listas, cédula, cola, licencia, archivos del .zip y llenado
-node pruebas/extension.js   # licencia, popup, cola, botón, ↻ de la extensión, http, migración
+node pruebas/extension.js   # licencia, popup, cola, doble captura, atajo, botón, ↻, http, migración
 ```
 
 GitHub Actions las corre en cada push (`.github/workflows/pruebas.yml`).

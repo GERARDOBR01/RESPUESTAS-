@@ -39,12 +39,18 @@
       <button id="nuevaAqui" class="secundario" type="button">Nueva captura para esta cédula</button>
     </div>
 
+    <div id="modoVerificar" class="modo" hidden>
+      <span><strong>Doble captura:</strong> vuelve a teclear las 60 de la hoja sin mirar la primera. Se marca en rojo donde no coincide.</span>
+      <button id="reiniciarVerificacion" class="secundario chico" type="button">Empezar de nuevo</button>
+    </div>
+
     <div id="rejilla" class="rejilla"></div>
 
-    <p class="ayuda">Escribe un número y salta sola a la siguiente; se guarda al momento. Para aplicaciones en grupo, captura a cada candidato con «+ Nueva» y su cédula: al abrir su captura en PsicoWeb se usan sus respuestas solas.</p>
+    <p id="ayuda" class="ayuda">Escribe un número y salta sola a la siguiente; se guarda al momento. Para aplicaciones en grupo, captura a cada candidato con «+ Nueva» y su cédula: al abrir su captura en PsicoWeb se usan sus respuestas solas. <span id="atajo"></span></p>
 
     <div class="botones">
       <button id="borrar" class="secundario" type="button">Borrar captura</button>
+      <button id="verificar" class="secundario" type="button" title="Teclear otra vez las 60 para encontrar errores de dedo">Verificar</button>
       <button id="llenar" class="primario" type="button">Llenar página</button>
     </div>
 

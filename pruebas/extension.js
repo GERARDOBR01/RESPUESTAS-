@@ -321,6 +321,43 @@ const fechaEn = (dias) => {
     opcionesPagina = {};
     ok('si la página rechaza un valor, el botón lo dice');
 
+    // --- Atajo de teclado: el service worker le pide al botón que llene. Se llama su
+    // manejador directamente (Playwright no puede apretar atajos del navegador).
+    const trabajador = async () => {
+      let sw = ctx.serviceWorkers().filter((w) => w.url().includes(ID)).pop();
+      if (!sw) {
+        const despierta = ctx.waitForEvent('serviceworker');
+        await almacen(() => chrome.runtime.sendMessage({ tipo: 'licencia' }));
+        sw = await despierta;
+      }
+      return sw;
+    };
+    const atajo = async () => (await trabajador()).evaluate(async () => {
+      const [t] = await chrome.tabs.query({ url: 'https://app.psicoweb.com/*' });
+      return llenarConAtajo(t);
+    });
+    await raven.goto(URL_RAVEN_MINUSCULAS); // Chrome no le pone el botón
+    await raven.waitForTimeout(300);
+    assert.equal(await raven.locator('#raven-llenar').count(), 0);
+    await atajo();
+    await raven.locator('#raven-llenar button').waitFor();
+    await botonCumple(/✓ 60 llenadas/);
+    assert.deepEqual(await ordenadas(), nuevas, 'el atajo pone el botón y llena');
+    await vaciar();
+    await atajo();
+    await raven.waitForFunction(() => document.querySelector('input[name=r60]').value !== '');
+    assert.deepEqual(await ordenadas(), nuevas, 'con el botón ya puesto también llena');
+    assert.equal(await raven.locator('#raven-llenar').count(), 1, 'no duplica el botón');
+    ({ p: popup } = await abrirPopup());
+    const comandos = await popup.evaluate(() => chrome.commands.getAll());
+    assert.ok(comandos.some((k) => k.name === 'llenar'), 'el manifest declara el atajo');
+    const atajoLlenar = comandos.find((k) => k.name === 'llenar').shortcut;
+    if (atajoLlenar) assert.match(await popup.textContent('#atajo'), new RegExp(atajoLlenar.replace(/\+/g, '\\+')));
+    await popup.close();
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+    ok(`atajo de teclado (${atajoLlenar || 'sin asignar'}): llena igual que el botón, aunque la pestaña no lo tenga`);
+
     // --- Aviso por cédula: no llenar a un candidato con las respuestas de otro
     assert.ok(!JSON.stringify(await almacen()).includes('PRUEBA'), 'no se guarda la cédula, solo su huella');
 
@@ -447,9 +484,69 @@ const fechaEn = (dias) => {
     ok('cola: dos candidatos capturados de antemano, cada uno se llena solo en su cédula');
     await otra.close();
 
+    // --- Doble captura: se teclea otra vez sin ver la primera; las diferencias se marcan
+    await raven.goto(URL_RAVEN);
+    await boton.waitFor();
+    ({ p: popup, errores } = await abrirPopup());
+    const primera = Array.from({ length: 60 }, (_, i) => String((i % 7) + 1));
+    await popup.click('#r1');
+    await popup.keyboard.type(primera.join(''));
+    await popup.click('#verificar');
+    assert.equal(await popup.textContent('#contador'), '2ª: 0 / 60');
+    assert.ok(await popup.isVisible('#modoVerificar'));
+    assert.ok(await popup.isDisabled('#llenar'), 'no se llena a media verificación');
+    assert.equal(await popup.inputValue('#r1'), '', 'no muestra la primera captura');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r1');
+    const segunda = [...primera];
+    segunda[6] = '9';
+    segunda[21] = '9';
+    await popup.keyboard.type(segunda.slice(0, 10).join(''));
+    assert.ok(await popup.evaluate(() => document.getElementById('r7').classList.contains('difiere')), 'se marca al momento');
+    assert.equal(await popup.getAttribute('#r7', 'title'), '', 'sin revelar la primera');
+    await popup.keyboard.type(segunda.slice(10).join(''));
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'verificar', 'tras la 60 pasa a «Terminar»');
+    await popup.keyboard.press('Enter');
+    assert.match(await popup.textContent('#estado'), /Diferencias en 2: 7, 22/);
+    assert.equal(await popup.inputValue('#r7'), primera[6], 'vuelve a mostrar la primera');
+    assert.match(await popup.getAttribute('#r7', 'title'), new RegExp(`1ª captura: ${primera[6]} · 2ª: 9`));
+    assert.equal(await popup.evaluate(() => document.getElementById('r7').parentElement.dataset.segunda), '9', 'la 2ª se ve junto a la casilla');
+    assert.equal(await popup.evaluate(() => document.activeElement.id), 'r7', 'lleva a la primera diferencia');
+    assert.match(await popup.evaluate(() => document.getElementById('capturas').selectedOptions[0].textContent), /2 diferencias/);
+    await popup.close();
+    // El botón de la página pide confirmación mientras haya diferencias
+    await vaciar();
+    await botonDice('60/60');
+    await boton.click();
+    await botonCumple(/2 diferencias sin resolver/);
+    assert.ok((await leer()).every((v) => v === ''), 'el primer clic no llena');
+    await boton.click();
+    await botonCumple(/✓ 60 llenadas/);
+    assert.deepEqual(await ordenadas(), primera, 'llena con la primera captura');
+    // Se resuelven con la hoja: lo que se escribe en la casilla roja queda en las dos
+    ({ p: popup, errores } = await abrirPopup());
+    await popup.click('#r7');
+    await popup.keyboard.type('9');
+    await popup.click('#r22');
+    await popup.keyboard.type('9');
+    assert.equal(await popup.evaluate(() => document.querySelectorAll('.difiere').length), 0);
+    assert.match(await popup.evaluate(() => document.getElementById('capturas').selectedOptions[0].textContent), /verificada/);
+    await popup.click('#llenar');
+    await esperarTexto(popup, '#estado', /Listo: 60/);
+    assert.deepEqual(await ordenadas(), segunda);
+    // «Empezar de nuevo» borra solo la segunda
+    await popup.click('#verificar');
+    await popup.click('#reiniciarVerificacion');
+    assert.equal(await popup.textContent('#contador'), '2ª: 0 / 60');
+    await popup.click('#verificar');
+    assert.equal(await popup.inputValue('#r7'), '9', 'la primera captura sigue igual');
+    assert.deepEqual(errores, []);
+    await popup.close();
+    ok('doble captura: marca diferencias sin revelar la 1ª, pide confirmación y se resuelve con la hoja');
+
     // --- Licencia en el botón de la página: vencida no llena; en gracia sí, con aviso
     await almacen(async () => {
       const { capturas } = await chrome.storage.local.get('capturas');
+      capturas[0].verificacion = null;
       capturas[0].respuestas = Array(60).fill('4');
       await chrome.storage.local.set({ capturas });
     });

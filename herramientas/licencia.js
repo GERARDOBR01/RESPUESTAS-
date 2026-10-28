@@ -42,6 +42,15 @@ function escribirPublica(jwk, archivo = LICENCIA_JS) {
 }
 
 function llaves() {
+  // En otra computadora (o tras perder la carpeta) licencia.js ya trae la llave pública:
+  // reemplazarla invalidaría todas las licencias emitidas.
+  if (!fs.existsSync(PRIVADA) && !/^const LICENCIA_PUBLICA = null;$/m.test(fs.readFileSync(LICENCIA_JS, 'utf8'))) {
+    console.error('licencia.js ya tiene una llave pública, pero no encontré la privada en ' + PRIVADA + '.');
+    console.error('Copia ahí tu respaldo de privada.pem (o define RAVEN_LICENCIAS con su carpeta).');
+    console.error('Solo si la perdiste para siempre: pon «const LICENCIA_PUBLICA = null;» en licencia.js y');
+    console.error('vuelve a correr esto; tendrás que emitir de nuevo todas las licencias.');
+    process.exit(1);
+  }
   if (fs.existsSync(PRIVADA)) {
     console.error(`Ya existe ${PRIVADA}. No la reemplazo: las licencias emitidas dejarían de valer.`);
     console.error('Si de verdad quieres llaves nuevas, mueve esa carpeta a otro lado y vuelve a correr esto.');
@@ -56,10 +65,20 @@ function llaves() {
   console.log('Llave pública escrita en licencia.js → haz commit y publica una versión nueva.');
 }
 
+function fechaValida(texto) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(texto || '')) return false;
+  const d = new Date(texto + 'T00:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === texto;
+}
+
 function emitir(cliente, vence) {
-  if (!cliente || !/^\d{4}-\d{2}-\d{2}$/.test(vence || '')) {
+  if (!cliente || !fechaValida(vence)) {
     console.error('Uso: node herramientas/licencia.js emitir "Nombre del cliente" AAAA-MM-DD');
+    console.error('(la fecha de vencimiento debe existir en el calendario, p. ej. 2027-01-31)');
     process.exit(1);
+  }
+  if (vence < new Date().toISOString().slice(0, 10)) {
+    console.error(`Aviso: ${vence} ya pasó; la clave nacerá vencida.`);
   }
   const privada = crypto.createPrivateKey(fs.readFileSync(PRIVADA));
   const { clave, datos } = firmarClave(privada, cliente, vence);
@@ -85,7 +104,11 @@ if (require.main === module) {
   else if (orden === 'emitir') emitir(args[0], args[1]);
   else if (orden === 'leer') leer(args.join(''));
   else {
-    console.log(fs.readFileSync(__filename, 'utf8').split('\n').slice(1, 6).join('\n').replace(/^\/\/ ?/gm, ''));
+    console.log([
+      'node herramientas/licencia.js llaves                       crea el par de llaves (una vez)',
+      'node herramientas/licencia.js emitir "Cliente" 2027-01-31  imprime la clave para ese cliente',
+      'node herramientas/licencia.js leer <clave>                 muestra a quién y hasta cuándo',
+    ].join('\n'));
   }
 }
 

@@ -18,7 +18,7 @@ Mientras `licencia.js` no tenga llave pública (`LICENCIA_PUBLICA = null`) la ex
    - Enter en la 60 pasa a **Llenar página**; otro Enter llena.
 3. En la captura del Raven en PsicoWeb aprieta el botón flotante **Llenar** (abajo a la derecha), **Llenar página** en la extensión o el atajo **Alt+Shift+L**. Luego revisa y guarda en la página.
 
-**Atajos** (se cambian en `chrome://extensions/shortcuts`): **Alt+Shift+L** llena la página igual que el botón, con las mismas comprobaciones (licencia, otra cédula, diferencias); si la pestaña no tiene el botón se lo pone primero. **Alt+Shift+R** abre la extensión. El popup muestra el atajo que esté asignado.
+**Atajos** (se cambian en `chrome://extensions/shortcuts`): **Alt+Shift+L** llena la página igual que el botón, con las mismas comprobaciones (licencia, otra cédula, diferencias); si la pestaña no tiene el botón se lo pone primero. **Alt+Shift+K** abre la extensión. El popup muestra el atajo que esté asignado.
 
 El botón de la página muestra de quién son las respuestas y cuántas hay, y se actualiza solo. Si tapa algo de la página, arrástralo: recuerda dónde lo dejaste.
 
@@ -53,6 +53,10 @@ node herramientas/licencia.js emitir "Clínica X" 2027-01-31  # imprime la clave
 node herramientas/licencia.js leer RAVEN1.…                # a quién y hasta cuándo
 ```
 La llave privada queda en `~/.raven-licencias/privada.pem` (o `RAVEN_LICENCIAS=<carpeta>`) y cada clave emitida se anota en `emitidas.csv` de esa carpeta. **Haz respaldo de esa carpeta y no la subas a git:** con ella cualquiera emite licencias, y si se pierde hay que crear llaves nuevas y volver a emitirlas todas. Conviene emitir licencias de 1–3 meses, porque una clave no se puede revocar antes de que venza.
+
+**Al pasar de 0.5 a 0.6 o más**, la extensión deja de llenar hasta que se pega una clave (las capturas se conservan). Manda la clave junto con la actualización.
+
+**Si el reloj de una computadora estuvo adelantado** (p. ej. un año), la extensión recuerda esa fecha y una licencia vigente aparecerá vencida aunque se corrija el reloj. Es el costo de no dejar que atrasar el reloj reviva una licencia. Solución: quitar la extensión y volver a instalarla (se borran las capturas guardadas y la licencia; se vuelve a pegar la clave).
 
 Esto sube el costo de copiar la extensión, pero no lo impide: el código está en la computadora del cliente y quien sepa puede quitar la comprobación. La protección de fondo sigue siendo la [LICENSE](LICENSE).
 

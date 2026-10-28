@@ -100,7 +100,11 @@ function pegar(e, i) {
 
 const valores = () => casillas.map((c) => c.value);
 
+// Lo que este popup escribió y todavía no regresa como cambio: al teclear rápido los
+// avisos llegan atrasados y no deben tomarse como cambios de fuera.
+const escritasPropias = new Set();
 function guardar() {
+  escritasPropias.add(JSON.stringify(capturas));
   return chrome.storage.local.set({ capturas, actual: actualId })
     .catch((e) => estado('No se pudo guardar: ' + e.message, 'mal'));
 }
@@ -540,6 +544,20 @@ $('guardarClave').addEventListener('click', async () => {
   }
   mostrarCaptura(actualId);
   if (propia) estado(`Respuestas de «${nombreCorto(propia)}» para esta cédula.`);
+
+  // Si se llena desde la página (botón o atajo) con el popup abierto, se toma lo que la
+  // página guardó (✓ llenada, cédula) para no pisarlo con la copia de aquí.
+  chrome.storage.onChanged.addListener((cambios, area) => {
+    if (area !== 'local' || !cambios.capturas) return;
+    const nuevas = cambios.capturas.newValue;
+    const texto = JSON.stringify(nuevas);
+    if (!Array.isArray(nuevas) || escritasPropias.delete(texto)) return;
+    const enfocada = document.activeElement;
+    capturas = nuevas;
+    if (!actual()) actualId = capturas[0]?.id;
+    if (actual()) mostrarCaptura(actualId);
+    enfocada?.focus();
+  });
 
   // El atajo lo puede cambiar el usuario en chrome://extensions/shortcuts
   chrome.commands.getAll().then((comandos) => {

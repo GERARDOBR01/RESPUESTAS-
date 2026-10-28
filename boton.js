@@ -116,9 +116,11 @@
       if (!llenasDe(captura)) return pintar();
       const licencia = await chrome.runtime.sendMessage({ tipo: 'licencia' });
       if (!licencia?.puedeLlenar) {
-        return mostrar(licencia?.estado === 'vencida'
-          ? 'Tu licencia venció · renuévala para seguir llenando'
-          : 'Activa tu licencia: abre la extensión', 'mal', 4000);
+        const motivo = {
+          vencida: 'Tu licencia venció · renuévala para seguir llenando',
+          invalida: 'La clave de licencia no es válida · abre la extensión',
+        }[licencia?.estado] || 'Activa tu licencia: abre la extensión';
+        return mostrar(motivo, 'mal', 4000);
       }
       if (motivo === 'otra' && confirmarOtra()) {
         return mostrar('Son de otra cédula · clic otra vez para llenar igual', 'aviso', 4000);

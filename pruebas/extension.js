@@ -352,10 +352,25 @@ const fechaEn = (dias) => {
     const comandos = await popup.evaluate(() => chrome.commands.getAll());
     assert.ok(comandos.some((k) => k.name === 'llenar'), 'el manifest declara el atajo');
     const atajoLlenar = comandos.find((k) => k.name === 'llenar').shortcut;
+    // Chrome deja vacío un atajo que choca con uno suyo (pasó con Alt+Shift+R)
+    for (const k of comandos) assert.ok(k.shortcut, `Chrome asignó el atajo «${k.name}» del manifest`);
     if (atajoLlenar) assert.match(await popup.textContent('#atajo'), new RegExp(atajoLlenar.replace(/\+/g, '\\+')));
     await popup.close();
     await raven.goto(URL_RAVEN);
     await boton.waitFor();
+    // Con el popup abierto, lo que guarda la página (✓ llenada) no se pierde al seguir usándolo
+    ({ p: popup, errores } = await abrirPopup());
+    await popup.click('#r60');
+    await popup.keyboard.type(nuevas[59]); // cambiar una casilla quita la marca de llenada
+    assert.ok(!(await almacen()).capturas[0].llenada);
+    await vaciar();
+    await atajo();
+    await popup.waitForFunction(() => /✓ llenada/.test(document.getElementById('capturas').selectedOptions[0].textContent));
+    await popup.fill('#nombre', 'Otro nombre');
+    await popup.fill('#nombre', 'Candidato 1');
+    assert.ok((await almacen()).capturas[0].llenada, 'el popup no pisó la marca de llenada');
+    assert.deepEqual(errores, []);
+    await popup.close();
     ok(`atajo de teclado (${atajoLlenar || 'sin asignar'}): llena igual que el botón, aunque la pestaña no lo tenga`);
 
     // --- Aviso por cédula: no llenar a un candidato con las respuestas de otro

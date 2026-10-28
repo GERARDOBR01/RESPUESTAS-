@@ -76,6 +76,7 @@ PsicoWeb también contesta por `http://`. Ahí las respuestas viajarían sin cif
 - `analizar.js`: lee una lista pegada (columna de Excel, comas o espacios).
 - `herramientas/licencia.js`: emite las claves. `herramientas/empaquetar.ps1`: arma el .zip.
 - `tienda/`: ficha, permisos, aviso de privacidad e imágenes para la Chrome Web Store.
+- `tienda/video/`: el video demo (60 s, 16:9 y 9:16), hecho con la extensión real y [HyperFrames](https://hyperframes.heygen.com). Ver `tienda/ficha.md`.
 - `marca/logo.svg`: logo original (matriz 2×2 con la pieza que falta en rojo). `node marca/generar-iconos.js` regenera `iconos/icono-{16,32,48,128}.png`.
 
 ## Entregar a un cliente

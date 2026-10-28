@@ -1,5 +1,5 @@
-// analizar(), llenar(), cedulaDe() y huellaCedula() vienen de analizar.js, llenar.js y
-// cedula.js (cargados antes en popup.html).
+// analizar(), llenar(), cedulaDe(), huellaCedula(), esDeOtraCedula() y segundoClic() vienen
+// de analizar.js, llenar.js y cedula.js (cargados antes en popup.html).
 const $ = (id) => document.getElementById(id);
 const btnLlenar = $('llenar');
 const btnBorrar = $('borrar');
@@ -89,10 +89,9 @@ const valores = () => casillas.map((c) => c.value);
 let dueno = null;          // huella guardada con las respuestas
 let huellaPestana = null;  // huella de la cédula abierta en la pestaña
 let llenasAntes = 0;
-let confirmarOtraHasta = 0;
+const confirmarOtra = segundoClic(4000);
 
-const esDeOtra = () =>
-  Boolean(dueno && huellaPestana && dueno !== huellaPestana && casillas.some((c) => c.value));
+const esDeOtra = () => esDeOtraCedula(dueno, huellaPestana) && casillas.some((c) => c.value);
 
 function avisoOtra() {
   $('otra').hidden = !esDeOtra();
@@ -169,15 +168,13 @@ async function llenarPestana(respuestas) {
 }
 
 // Borrar pide un segundo clic para no perder la captura por accidente.
-let confirmarHasta = 0;
+const confirmarBorrar = segundoClic(3000);
 btnBorrar.addEventListener('click', async () => {
-  if (Date.now() > confirmarHasta) {
-    confirmarHasta = Date.now() + 3000;
+  if (confirmarBorrar()) {
     btnBorrar.textContent = '¿Seguro? Clic otra vez';
     setTimeout(() => { btnBorrar.textContent = 'Borrar todo'; }, 3000);
     return;
   }
-  confirmarHasta = 0;
   btnBorrar.textContent = 'Borrar todo';
   await borrarTodo();
 });
@@ -199,11 +196,10 @@ async function borrarTodo() {
 btnLlenar.addEventListener('click', async () => {
   const respuestas = valores();
   if (respuestas.every((v) => !v)) return estado('No hay respuestas capturadas.', 'mal');
-  if (esDeOtra() && Date.now() > confirmarOtraHasta) {
-    confirmarOtraHasta = Date.now() + 4000;
+  if (esDeOtra() && confirmarOtra()) {
     return estado('Estas respuestas se capturaron para otra cédula. Clic otra vez en «Llenar página» para usarlas aquí.', 'aviso');
   }
-  confirmarOtraHasta = 0;
+  confirmarOtra.cancelar();
 
   btnLlenar.disabled = true;
   try {

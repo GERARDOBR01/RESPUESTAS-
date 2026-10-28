@@ -25,4 +25,27 @@ function huellaCedula(cedula) {
   return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(16);
 }
 
-if (typeof module !== 'undefined') module.exports = { cedulaDe, huellaCedula };
+// Las respuestas guardadas son de otro candidato si hay huella de ambos lados y no coinciden.
+// Sin cédula en la URL o sin dueño guardado no se puede saber, y no se avisa.
+function esDeOtraCedula(dueno, huella) {
+  return Boolean(dueno && huella && dueno !== huella);
+}
+
+// Confirmación por segundo clic: pedir() da true en el primer clic (hay que avisar) y
+// false si se repite antes de `ms` (ya confirmó). Lo usan «Borrar todo» y llenar en
+// otra cédula, en el popup y en el botón de la página.
+function segundoClic(ms, ahora = Date.now) {
+  let hasta = 0;
+  const pedir = () => {
+    if (ahora() > hasta) {
+      hasta = ahora() + ms;
+      return true;
+    }
+    hasta = 0;
+    return false;
+  };
+  pedir.cancelar = () => { hasta = 0; };
+  return pedir;
+}
+
+if (typeof module !== 'undefined') module.exports = { cedulaDe, huellaCedula, esDeOtraCedula, segundoClic };

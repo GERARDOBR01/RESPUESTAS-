@@ -1,6 +1,6 @@
 // Botón flotante en la captura del Raven: llena con un clic usando las respuestas
-// guardadas en la extensión. llenar(), cedulaDe() y huellaCedula() vienen de llenar.js y
-// cedula.js (mismo content script).
+// guardadas en la extensión. llenar(), cedulaDe(), huellaCedula(), esDeOtraCedula() y
+// segundoClic() vienen de llenar.js y cedula.js (mismo content script).
 // Va dentro de Shadow DOM para que ni la página ni el botón se afecten los estilos.
 // Se puede arrastrar (por si tapa algo de la página) y recuerda dónde quedó.
 (() => {
@@ -86,7 +86,7 @@
 
   // De qué candidato son las respuestas: huella de la cédula (cedula.js).
   let dueno = null;
-  let confirmarOtraHasta = 0;
+  const confirmarOtra = segundoClic(4000);
 
   async function leer() {
     const guardado = await chrome.storage.local.get(['respuestas', 'dueno']);
@@ -104,11 +104,10 @@
       if (!llenas()) return pintar();
       const cedula = cedulaDe(location.href);
       const huella = cedula ? huellaCedula(cedula) : null;
-      if (huella && dueno && dueno !== huella && Date.now() > confirmarOtraHasta) {
-        confirmarOtraHasta = Date.now() + 4000;
+      if (esDeOtraCedula(dueno, huella) && confirmarOtra()) {
         return mostrar('Son de otra cédula · clic otra vez para llenar igual', 'aviso', 4000);
       }
-      confirmarOtraHasta = 0;
+      confirmarOtra.cancelar();
       const r = llenar(respuestas);
       if (!r.error && huella) {
         // Se llenaron en esta cédula: desde ahora son de este candidato.

@@ -45,5 +45,9 @@ node pruebas/unitarias.js   # lectura de listas y llenado en 3 acomodos de pági
 node pruebas/extension.js   # popup, botón, guardado, ↻ de la extensión, arrastre
 ```
 
+GitHub Actions las corre en cada push (`.github/workflows/pruebas.yml`).
+
+`pruebas/muestras/` guarda páginas reales de la captura (sin datos del candidato): las unitarias llenan cada una y comprueban que cada número cae en su lugar. Así un cambio de PsicoWeb aparece en las pruebas y no con un cliente. Cómo agregar una: `pruebas/muestras/LEEME.txt`.
+
 ## Licencia
 Software propietario de Gerardo Barrera, todos los derechos reservados. Se usa solo con una licencia o suscripción por escrito; ver [LICENSE](LICENSE). No está afiliado a PsicoWeb.

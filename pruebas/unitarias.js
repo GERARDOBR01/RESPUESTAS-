@@ -1,6 +1,7 @@
 // Pruebas de analizar() y llenar() sobre páginas falsas en Chromium real.
 // Uso: node pruebas/unitarias.js
 const assert = require('assert');
+const fs = require('fs');
 const path = require('path');
 const { RAIZ, cargarPlaywright, rutaChromium, paginaFalsa } = require('./entorno');
 const { analizar } = require('../analizar.js');
@@ -39,6 +40,23 @@ function pruebasCedula() {
   for (let i = 0; i < 5000; i++) huellas.add(huellaCedula('ABCD0101' + String(i).padStart(10, '0')));
   assert.equal(huellas.size, 5000);
   console.log('✓ cédula: lectura de la URL y huella');
+
+  const { esDeOtraCedula, segundoClic } = require('../cedula.js');
+  assert.equal(esDeOtraCedula('a1', 'b2'), true, 'huellas distintas');
+  assert.equal(esDeOtraCedula('a1', 'a1'), false, 'misma huella');
+  assert.equal(esDeOtraCedula(null, 'a1'), false, 'sin dueño no se sabe');
+  assert.equal(esDeOtraCedula('a1', null), false, 'sin cédula en la URL no se sabe');
+  let reloj = 1000;
+  const pedir = segundoClic(4000, () => reloj);
+  assert.equal(pedir(), true, 'primer clic: avisa');
+  reloj += 3000;
+  assert.equal(pedir(), false, 'segundo clic dentro de la ventana: confirma');
+  assert.equal(pedir(), true, 'tras confirmar vuelve a pedir');
+  reloj += 4001;
+  assert.equal(pedir(), true, 'ventana vencida: vuelve a avisar');
+  pedir.cancelar();
+  assert.equal(pedir(), true, 'cancelar cierra la ventana');
+  console.log('✓ cédula: otra cédula y segundo clic');
 }
 
 async function pruebasLlenar() {
@@ -96,6 +114,37 @@ async function pruebasLlenar() {
   assert.equal(r.metodo, null);
   assert.ok(r.error);
   console.log('✓ llenar · otra página no se toca');
+
+  // Muestras reales de la captura (HTML guardado de PsicoWeb sin datos del candidato).
+  const carpeta = path.join(__dirname, 'muestras');
+  const muestras = fs.existsSync(carpeta) ? fs.readdirSync(carpeta).filter((f) => f.endsWith('.html')) : [];
+  for (const archivo of muestras) {
+    await pagina.setContent(fs.readFileSync(path.join(carpeta, archivo), 'utf8'));
+    await pagina.addScriptTag({ path: path.join(RAIZ, 'llenar.js') });
+    r = await pagina.evaluate((v) => llenar(v), valores);
+    assert.equal(r.error, null, `${archivo}: ${r.error}`);
+    assert.equal(r.llenadas, 60, archivo);
+    // Orden: se llena una casilla a la vez y se ubica en pantalla. La página real tiene
+    // 5 series (A–E) de 12 hacia abajo: n+1 queda debajo de n y cada serie a la derecha.
+    const sola = (k) => Array.from({ length: 60 }, (_, i) => (i === k ? '5' : ''));
+    const lugares = [];
+    for (let k = 0; k < 60; k++) {
+      await pagina.evaluate((v) => llenar(v), sola(k));
+      lugares.push(await pagina.evaluate(() => {
+        const llenas = [...document.querySelectorAll('input')].filter((el) => el.value === '5');
+        if (llenas.length !== 1) return null;
+        const r = llenas[0].getBoundingClientRect();
+        return { x: r.left, y: r.top };
+      }));
+    }
+    for (let k = 0; k < 60; k++) {
+      assert.ok(lugares[k], `${archivo}: la ${k + 1} cae en una sola casilla`);
+      if (k % 12) assert.ok(lugares[k].y > lugares[k - 1].y, `${archivo}: la ${k + 1} va debajo de la ${k}`);
+      else if (k) assert.ok(lugares[k].x > lugares[k - 12].x, `${archivo}: la serie de la ${k + 1} va a la derecha`);
+    }
+    console.log(`✓ llenar · muestra real ${archivo} (${r.metodo})`);
+  }
+  if (!muestras.length) console.log('· sin muestras reales (ver pruebas/muestras/LEEME.txt)');
 
   await navegador.close();
 }
